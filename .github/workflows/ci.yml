@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: personal_schedule
+          POSTGRES_USER: schedule
+          POSTGRES_PASSWORD: schedule
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U schedule -d personal_schedule"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://schedule:schedule@127.0.0.1:5432/personal_schedule?schema=public
+      TEST_DATABASE_URL: postgresql://schedule:schedule@127.0.0.1:5432/personal_schedule_test?schema=public
+      ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      DEMO_ENABLED: 'true'
+      NODE_ENV: test
+      WEB_ORIGIN: http://127.0.0.1:3100
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create the isolated test database
+        env:
+          PGPASSWORD: schedule
+        run: psql -h 127.0.0.1 -U schedule -d personal_schedule -c 'CREATE DATABASE personal_schedule_test'
+      - run: npm run browser:install
+      - run: npm audit --omit=dev
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:e2e

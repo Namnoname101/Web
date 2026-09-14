@@ -1,0 +1,284 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EventType {
+  CLASS
+  PERSONAL
+  DEADLINE
+
+  @@map("event_type_enum")
+}
+
+enum EventStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+
+  @@map("event_status_enum")
+}
+
+enum EventSource {
+  MANUAL
+  SCHOOL_PORTAL
+  OUTLOOK
+  SYSTEM
+
+  @@map("event_source_enum")
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@map("task_priority_enum")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("task_status_enum")
+}
+
+enum TaskBlockStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+
+  @@map("task_block_status_enum")
+}
+
+enum TaskBlockOrigin {
+  AUTO
+  MANUAL
+
+  @@map("task_block_origin_enum")
+}
+
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  email            String   @unique @db.VarChar(320)
+  name             String   @db.VarChar(120)
+  passwordHash     String?  @map("password_hash") @db.Text
+  studentId        String?  @unique @map("student_id") @db.VarChar(64)
+  microsoftId      String?  @unique @map("microsoft_id") @db.VarChar(255)
+  locale           String   @default("vi") @db.VarChar(2)
+  minBlockMinutes  Int      @default(30) @map("min_block_minutes")
+  travelMinutes    Int      @default(15) @map("travel_minutes")
+  studyLocation    String?  @map("study_location") @db.VarChar(255)
+  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
+  scheduleVersion Int      @default(0) @map("schedule_version")
+  isDemo           Boolean  @default(false) @map("is_demo")
+  telegramChatId   String?  @unique @map("telegram_chat_id") @db.Text
+  activeStartTime  DateTime @default(dbgenerated("'07:00:00'::time without time zone")) @map("active_start_time") @db.Time(0)
+  activeEndTime    DateTime @default(dbgenerated("'22:00:00'::time without time zone")) @map("active_end_time") @db.Time(0)
+  breakStartTime   DateTime @default(dbgenerated("'11:30:00'::time without time zone")) @map("break_start_time") @db.Time(0)
+  breakEndTime     DateTime @default(dbgenerated("'13:00:00'::time without time zone")) @map("break_end_time") @db.Time(0)
+  timezone         String   @default("Asia/Ho_Chi_Minh") @db.VarChar(64)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  events           Event[]
+  tasks            Task[]
+  sessions         Session[]
+  suggestions      Suggestion[]
+  notifications    Notification[]
+  integrations     Integration[]
+  academicRecords  AcademicRecord[]
+
+  @@map("users")
+}
+
+model Event {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  title          String      @db.VarChar(255)
+  startTime      DateTime    @map("start_time") @db.Timestamptz(6)
+  endTime        DateTime    @map("end_time") @db.Timestamptz(6)
+  location       String?     @db.VarChar(255)
+  eventType      EventType   @map("event_type")
+  status         EventStatus @default(SCHEDULED)
+  source         EventSource @default(MANUAL)
+  externalId     String?     @map("external_id") @db.VarChar(512)
+  sourceMetadata Json        @default("{}") @map("source_metadata") @db.JsonB
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, externalId], map: "uq_events_external_source")
+  @@index([userId, startTime, endTime], map: "ix_events_user_time")
+  @@index([userId, status, startTime], map: "ix_events_user_status_start")
+  @@map("events")
+}
+
+model Task {
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  title              String              @db.VarChar(255)
+  notes              String              @default("") @db.Text
+  location           String?             @db.VarChar(255)
+  durationMinutes    Int                 @map("duration_minutes")
+  deadline           DateTime            @db.Timestamptz(6)
+  priority           TaskPriority        @default(MEDIUM)
+  status             TaskStatus          @default(PENDING)
+  isSplittable       Boolean             @default(true) @map("is_splittable")
+  isScheduled        Boolean             @default(false) @map("is_scheduled")
+  completedAt        DateTime?           @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleBlocks     TaskScheduleBlock[]
+
+  @@unique([id, userId], map: "uq_tasks_id_user")
+  @@index([userId, priority, deadline], map: "ix_tasks_scheduling_queue")
+  @@index([userId, deadline], map: "ix_tasks_user_deadline")
+  @@map("tasks")
+}
+
+model TaskScheduleBlock {
+  id        String            @id @default(uuid()) @db.Uuid
+  taskId    String            @map("task_id") @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  startTime DateTime          @map("start_time") @db.Timestamptz(6)
+  endTime   DateTime          @map("end_time") @db.Timestamptz(6)
+  status    TaskBlockStatus   @default(SCHEDULED)
+  origin    TaskBlockOrigin   @default(AUTO)
+  location  String?           @db.VarChar(255)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  task      Task              @relation(fields: [taskId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@unique([taskId, startTime, endTime], map: "uq_task_schedule_blocks_exact_slot")
+  @@index([userId, startTime, endTime], map: "ix_task_schedule_blocks_user_time")
+  @@index([taskId, status], map: "ix_task_schedule_blocks_task_status")
+  @@map("task_schedule_blocks")
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum SuggestionKind {
+  TASK_PLAN
+  EVENT_CHANGE
+}
+
+enum IntegrationProvider {
+  OUTLOOK
+  UED
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  REAUTH_REQUIRED
+  ERROR
+  DISCONNECTED
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model OAuthAttempt {
+  stateHash       String   @id @map("state_hash") @db.VarChar(64)
+  browserHash     String   @map("browser_hash") @db.VarChar(64)
+  encryptedSecret String   @map("encrypted_secret") @db.Text
+  userId          String?  @map("user_id") @db.Uuid
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("oauth_attempts")
+}
+
+model Suggestion {
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  kind            SuggestionKind
+  status          SuggestionStatus @default(PENDING)
+  titleVi         String           @map("title_vi") @db.VarChar(255)
+  titleEn         String           @map("title_en") @db.VarChar(255)
+  payload         Json             @db.JsonB
+  baseVersion     Int              @map("base_version")
+  sourceKey       String?          @map("source_key") @db.VarChar(512)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt       DateTime         @map("expires_at") @db.Timestamptz(6)
+  decidedAt       DateTime?        @map("decided_at") @db.Timestamptz(6)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey])
+  @@index([userId, status, createdAt])
+  @@map("suggestions")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  titleVi   String    @map("title_vi") @db.VarChar(255)
+  titleEn   String    @map("title_en") @db.VarChar(255)
+  bodyVi    String    @map("body_vi") @db.Text
+  bodyEn    String    @map("body_en") @db.Text
+  dedupeKey String?   @map("dedupe_key") @db.VarChar(512)
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model Integration {
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
+  provider        IntegrationProvider
+  status          IntegrationStatus   @default(DISCONNECTED)
+  encryptedSecret String?             @map("encrypted_secret") @db.Text
+  cursor          Json                @default("{}") @db.JsonB
+  lastSyncAt      DateTime?           @map("last_sync_at") @db.Timestamptz(6)
+  nextSyncAt      DateTime            @default(now()) @map("next_sync_at") @db.Timestamptz(6)
+  lockedUntil     DateTime?           @map("locked_until") @db.Timestamptz(6)
+  leaseToken      String?             @map("lease_token") @db.VarChar(64)
+  failures        Int                 @default(0)
+  lastError       String?             @map("last_error") @db.VarChar(255)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([status, nextSyncAt])
+  @@map("integrations")
+}
+
+model AcademicRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  category    String   @db.VarChar(64)
+  externalId  String   @map("external_id") @db.VarChar(512)
+  title       String   @db.VarChar(255)
+  data        Json     @db.JsonB
+  syncedAt    DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, externalId])
+  @@map("academic_records")
+}

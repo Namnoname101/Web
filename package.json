@@ -1,0 +1,59 @@
+{
+  "name": "personal-automated-schedule",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:local": "node scripts/local-db.mjs",
+    "db:deploy": "node scripts/run-with-project-env.mjs db:deploy:inner",
+    "db:deploy:inner": "npm run db:deploy --workspace @personal-schedule/database",
+    "start": "node scripts/run-with-project-env.mjs start:inner",
+    "start:inner": "node apps/api/dist/server.js",
+    "start:worker": "node scripts/run-with-project-env.mjs start:worker:inner",
+    "start:worker:inner": "node apps/api/dist/worker.js",
+    "ued:materialize-legacy": "node scripts/materialize-legacy-ued-timetable.mjs",
+    "browser:install": "node scripts/run-with-project-env.mjs browser:install:inner",
+    "browser:install:inner": "playwright install chromium",
+    "setup": "node scripts/run-with-project-env.mjs setup:inner",
+    "setup:inner": "npm install",
+    "dev:web": "node scripts/run-with-project-env.mjs dev:web:inner",
+    "dev:web:inner": "npm run dev --workspace @personal-schedule/web",
+    "dev:api": "node scripts/run-with-project-env.mjs dev:api:inner",
+    "dev:api:inner": "npm run build --workspace @personal-schedule/database && npm run dev --workspace @personal-schedule/api",
+    "dev:worker": "node scripts/run-with-project-env.mjs dev:worker:inner",
+    "dev:worker:inner": "npm run build --workspace @personal-schedule/database && npm run dev:worker --workspace @personal-schedule/api",
+    "build": "node scripts/run-with-project-env.mjs build:inner",
+    "build:inner": "npm run build --workspace @personal-schedule/database && npm run build --workspace @personal-schedule/shared && npm run build --workspace @personal-schedule/api && npm run build --workspace @personal-schedule/web",
+    "typecheck": "node scripts/run-with-project-env.mjs typecheck:inner",
+    "typecheck:infra": "tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck .railway/railway.ts",
+    "typecheck:inner": "npm run typecheck:infra && npm run build --workspace @personal-schedule/database && npm run typecheck --workspace @personal-schedule/shared && npm run typecheck --workspace @personal-schedule/api && npm run typecheck --workspace @personal-schedule/web",
+    "test": "node scripts/run-with-project-env.mjs test:inner",
+    "test:e2e": "node scripts/run-with-project-env.mjs test:e2e:inner",
+    "test:e2e:inner": "npm run build && playwright test",
+    "test:integration": "node scripts/run-with-project-env.mjs test:integration:inner",
+    "test:integration:inner": "node scripts/test-integration.mjs",
+    "test:inner": "npm run test --workspaces --if-present",
+    "db:generate": "node scripts/run-with-project-env.mjs db:generate:inner",
+    "db:generate:inner": "npm run db:generate --workspace @personal-schedule/database",
+    "db:migrate": "node scripts/run-with-project-env.mjs db:migrate:inner",
+    "db:migrate:inner": "npm run db:migrate --workspace @personal-schedule/database"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "overrides": {
+    "@prisma/config@7.10.0": {
+      "deepmerge-ts": "8.0.2"
+    },
+    "prisma@7.10.0": {
+      "mysql2": "3.24.0"
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "railway": "^3.11.0"
+  }
+}

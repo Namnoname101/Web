@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.browsers
+.local
+.npm-cache
+.tmp
+node_modules
+**/node_modules
+**/dist
+coverage
+playwright-report
+test-results
+*.log
