@@ -1,219 +1,91 @@
-<div align="center">
+<p align="center">
+  <img src="https://img.shields.io/badge/stack-React%20%2B%20Express%20%2B%20PostgreSQL-4CAF50?style=flat-square" />
+  <img src="https://img.shields.io/github/actions/workflow/status/Namnoname101/Web/pages.yml?style=flat-square&label=deploy" />
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" />
+</p>
 
-# 🎓 unirhy**thm**
-### Personal Automated Schedule for Students
-### Lịch học thông minh dành cho sinh viên
+# unirhy**thm**
 
-<br/>
+Ứng dụng quản lý lịch học cá nhân dành cho sinh viên UED. Tự động kéo thời khóa biểu từ cổng thông tin trường về, rồi xếp lịch học/làm bài xung quanh những buổi học đó. Mọi thứ planner gợi ý — bạn chọn chấp nhận hay bỏ qua.
 
-[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-namnoname101.github.io/Web-4CAF50?style=for-the-badge)](https://namnoname101.github.io/Web/)
-[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/Namnoname101/Web/pages.yml?style=for-the-badge&label=Deploy&logo=github)](https://github.com/Namnoname101/Web/actions)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+*A personal schedule manager for UED students. It pulls your timetable from the university portal, then fits your study sessions around it. Everything the planner suggests, you decide.*
 
-<br/>
-
-> **🇻🇳 Tiếng Việt** | **🇬🇧 English**
-
-*Một ứng dụng lên lịch thế hệ mới dành riêng cho sinh viên UED — tự động nhập thời khóa biểu, xếp lịch thông minh, và luôn để bạn là người quyết định.*
-
-*A next-generation scheduling app built for UED students — automatically imports timetables, plans your study sessions, and always keeps you in control.*
-
-</div>
+**→ [Xem demo / Live preview](https://namnoname101.github.io/Web/)**
 
 ---
 
-## ✨ Tính năng nổi bật / Key Features
+## Nó làm được gì
 
-| 🇻🇳 | 🇬🇧 |
-|-----|-----|
-| 📅 Nhập thời khóa biểu UED tự động, chính xác từng tiết | 📅 Automatic UED timetable import with exact period mapping |
-| 🤖 Planner AI xếp lịch học theo giờ hoạt động, deadline, ưu tiên | 🤖 Smart planner schedules tasks around active hours, deadlines & priorities |
-| 📬 Đồng bộ email Outlook để nhận thay đổi lịch từ trường | 📬 Outlook integration to catch schedule changes via school email |
-| ✅ Mọi thay đổi đều là **gợi ý** — sinh viên chấp nhận hoặc từ chối | ✅ All changes are **suggestions** — you accept or reject every one |
-| 🌐 Giao diện song ngữ Việt/Anh, responsive mobile | 🌐 Full Vietnamese/English UI, mobile responsive |
-| 🔒 Mật khẩu UED không bao giờ được lưu lại | 🔒 UED password is **never stored** |
-| 🌙 Lịch trình trong ngày theo múi giờ thực tế | 🌙 Timezone-aware daily agenda with past/current/upcoming states |
+- Đăng nhập bằng mã sinh viên UED, không lưu mật khẩu
+- Nhập thời khóa biểu học kỳ hiện tại (hoặc học kỳ khác tự chọn)
+- Planner tự tính: giờ hoạt động, giờ nghỉ, deadline, ưu tiên, thời gian di chuyển
+- Đề xuất lịch học → sinh viên accept hoặc reject từng cái
+- Đồng bộ email Outlook để bắt thay đổi lịch từ trường
+- Giao diện Việt/Anh, chạy được trên điện thoại
 
----
-
-## 🖼️ Giao diện / Screenshots
-
-<div align="center">
-
-> 📸 *Truy cập [Live Demo](https://namnoname101.github.io/Web/) để xem trực tiếp giao diện ứng dụng.*
->
-> *Visit the [Live Demo](https://namnoname101.github.io/Web/) to see the app in action.*
-
-</div>
-
----
-
-## 🏗️ Kiến trúc / Architecture
+## Stack
 
 ```
-unirhy thm/
-├── apps/
-│   ├── web/          # React 19 + TailwindCSS — Giao diện người dùng
-│   └── api/          # Express + TypeScript — API Server & Background Worker
-├── packages/
-│   ├── database/     # Prisma ORM + PostgreSQL — Schema & Migrations
-│   └── shared/       # DTOs, Schemas, Types dùng chung
-├── tests/
-│   └── e2e/          # Playwright — Kiểm thử End-to-End
-└── docs/             # Tài liệu yêu cầu, API, triển khai
+Frontend   React 19 + TailwindCSS + Vite
+Backend    Express + TypeScript
+Database   PostgreSQL + Prisma
+Auth       UED session  ·  Microsoft OAuth PKCE
+Test       Vitest + Playwright  (144 unit · 15 integration · 3 E2E)
 ```
 
-### 🔧 Công nghệ / Tech Stack
-
-<div align="center">
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, TailwindCSS, TypeScript, Vite |
-| **Backend** | Express.js, TypeScript, Node.js |
-| **Database** | PostgreSQL, Prisma ORM |
-| **Auth** | Session-based (UED), Microsoft OAuth PKCE |
-| **Testing** | Vitest, Playwright |
-| **Deploy** | Docker, Railway, GitHub Pages |
-
-</div>
-
----
-
-## 🚀 Cài đặt & Chạy Local / Local Setup
-
-### Yêu cầu / Prerequisites
-- Node.js 20+
-- PostgreSQL (hoặc Docker)
-
-### Các bước / Steps
+## Chạy local
 
 ```bash
-# 1. Clone project
+# 1. Clone và cài
 git clone https://github.com/Namnoname101/Web.git
 cd Web
-
-# 2. Tạo file môi trường / Create environment file
 cp .env.example .env
-# Sinh khóa mã hóa / Generate encryption key:
+
+# Sinh encryption key rồi dán vào .env
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-# Dán vào .env / Paste into .env
 
-# 3. Khởi động PostgreSQL
+# 2. Khởi động database
 docker compose up -d postgres
-# hoặc / or: npm run db:local   (Windows local PostgreSQL)
 
-# 4. Cài đặt & migrate database
+# 3. Setup
 npm run setup
 npm run db:generate
 npm run db:migrate
 
-# 5. Chạy ứng dụng (3 terminal riêng biệt / 3 separate terminals)
-npm run dev:api       # API Server  → http://localhost:3000
-npm run dev:worker    # Background Worker
-npm run dev:web       # Frontend   → http://localhost:5173
+# 4. Chạy (3 terminal)
+npm run dev:api       # → localhost:3000
+npm run dev:worker
+npm run dev:web       # → localhost:5173
 ```
 
----
-
-## 🧪 Kiểm thử / Testing
+## Test
 
 ```bash
-npm test                  # Unit tests (144 tests)
-npm run test:integration  # Integration tests (15 tests)
-npm run test:e2e          # Browser E2E tests (Playwright)
-npm run typecheck         # TypeScript type check toàn monorepo
-npm run build             # Production build
+npm test                   # unit tests
+npm run test:integration   # integration tests
+npm run test:e2e           # browser tests (Playwright)
+npm run typecheck
+npm run build
 ```
 
-> ✅ Toàn bộ test chạy trên database `_test` độc lập — không bao giờ dùng dữ liệu thật của sinh viên.
->
-> ✅ All tests run on an isolated `_test` database — never touching real student records.
+Tất cả test dùng database `_test` riêng, không đụng dữ liệu thật.
+
+## Tiến độ
+
+| | |
+|---|---|
+| ✅ Nền tảng API + Database | ✅ Planner + đề xuất |
+| ✅ Giao diện đầy đủ Việt/Anh | ✅ UED login + nhập thời khóa biểu |
+| 🔄 Outlook OAuth (cần app registration thật) | 🔄 Deploy production (cần server) |
+
+Chi tiết: [`docs/PROGRESS.md`](docs/PROGRESS.md) · API contract: [`docs/API.md`](docs/API.md)
+
+## Deploy
+
+Frontend tự động lên GitHub Pages mỗi khi push vào `main`.
+
+Backend cần server riêng — xem [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) để biết cách deploy lên Railway hoặc Fly.io. Config Railway có sẵn ở `.railway/`, Dockerfile có ở root.
 
 ---
 
-## 📊 Tiến độ / Progress
-
-| Milestone | 🇻🇳 Mô tả | 🇬🇧 Description | Status |
-|-----------|-----------|----------------|--------|
-| **M0** | Phạm vi & kiến trúc | Scope & architecture | ✅ Done |
-| **M1** | Nền tảng dữ liệu & API | Data foundation & CRUD APIs | ✅ Done |
-| **M2** | Xếp lịch & đề xuất | Auto-planner & suggestions | ✅ Done |
-| **M3** | Giao diện hoàn chỉnh | Full responsive UI | ✅ Done |
-| **M4** | Đồng bộ Outlook thật | Real Outlook OAuth & sync | 🔄 Needs app registration |
-| **M5** | UED đầy đủ | Full UED integration | 🔄 Needs smoke on past term |
-| **M6** | Phát hành | Production release | 🔄 Needs Docker smoke & deploy |
-
-> Chi tiết xem tại / See details at: [`docs/PROGRESS.md`](docs/PROGRESS.md)
-
----
-
-## 🔐 Bảo mật / Security
-
-- 🔒 **Mật khẩu UED không bao giờ được lưu lại** — chỉ dùng session token mã hóa
-- 🔑 **Microsoft refresh token** được mã hóa AES-256-GCM trước khi lưu vào database
-- 👤 Mọi API đều giới hạn theo người dùng — không thể xem dữ liệu của người khác
-- 🚫 Không có dữ liệu sinh viên thật trong code, test fixtures hay tài liệu
-
-<br/>
-
-- 🔒 **UED password is never stored** — only encrypted session tokens
-- 🔑 **Microsoft refresh tokens** are AES-256-GCM encrypted before storage
-- 👤 All APIs are user-scoped — no cross-user data access
-- 🚫 No real student data in code, test fixtures, or documentation
-
----
-
-## 🌐 Deploy / Deployment
-
-### GitHub Pages (Frontend Demo)
-Frontend được tự động deploy lên GitHub Pages qua GitHub Actions khi push lên nhánh `main`.
-
-*Frontend is automatically deployed to GitHub Pages via GitHub Actions on every push to `main`.*
-
-```
-🌐 https://namnoname101.github.io/Web/
-```
-
-### Production (Full Stack)
-Xem hướng dẫn chi tiết tại / See full guide at: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-
-- **Railway**: IaC config có sẵn tại `.railway/`
-- **Fly.io**: Dockerfile có sẵn tại root
-- Cần cấu hình: `DATABASE_URL`, `ENCRYPTION_KEY`, `SESSION_SECRET`
-
----
-
-## 📁 Tài liệu / Documentation
-
-| Tài liệu | Mô tả |
-|---------|-------|
-| [`docs/API.md`](docs/API.md) | Toàn bộ route contract của API |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Chi tiết tiến độ từng milestone |
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Hướng dẫn deploy Railway/Fly |
-| [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Yêu cầu chức năng gốc |
-| [`docs/UED.md`](docs/UED.md) | Ghi chú tích hợp UED |
-
----
-
-## 🧑‍💻 Tác giả / Author
-
-<div align="center">
-
-**Daitruong** — Sinh viên UED · Đại học Sư phạm · Đại học Đà Nẵng
-
-*"Small steps. A meaningful journey."*
-
-*"Từng bước nhỏ. Một hành trình ý nghĩa."*
-
-<br/>
-
-[![GitHub](https://img.shields.io/badge/GitHub-Namnoname101-181717?style=for-the-badge&logo=github)](https://github.com/Namnoname101)
-
-</div>
-
----
-
-<div align="center">
-<sub>Built with ❤️ for UED students · Được xây dựng với ❤️ dành cho sinh viên UED</sub>
-</div>
+Làm bởi **Daitruong** — sinh viên UED, Đại học Đà Nẵng.
