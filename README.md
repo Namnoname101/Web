@@ -88,4 +88,4 @@ Backend cần server riêng — xem [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) �
 
 ---
 
-Làm bởi **Daitruong** — sinh viên UED, Đại học Đà Nẵng.
+ **Daitruong**
