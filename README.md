@@ -200,7 +200,7 @@ Xem hướng dẫn chi tiết tại / See full guide at: [`docs/DEPLOYMENT.md`](
 
 <div align="center">
 
-**Sinh viên UED — Đại học Sư phạm · Đại học Đà Nẵng**
+**Daitruong** — Sinh viên UED · Đại học Sư phạm · Đại học Đà Nẵng
 
 *"Small steps. A meaningful journey."*
 
