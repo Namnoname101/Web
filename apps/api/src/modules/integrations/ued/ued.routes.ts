@@ -4,15 +4,15 @@ import { z } from 'zod';
 import { config } from '../../../config.js';
 import { cookie, cookieOptions, issueSession, publicUser } from '../../auth/session.js';
 import { getUedAdapter, uedReadiness } from './adapter.js';
-import { closeChallenge, startUedLogin, submitUedLogin } from './browser.js';
+import { closeChallenge, startUedLogin, submitUedLogin, UED_CHALLENGE_TTL_MS } from './browser.js';
 import { connectVerifiedUed } from './ued.service.js';
 
 export const uedRouter = Router();
 const CHALLENGE_COOKIE = 'ued_challenge';
-const challengeCookieOptions = { ...cookieOptions, path: '/api/v1/auth/ued', maxAge: 10 * 60_000 };
+const challengeCookieOptions = { ...cookieOptions, path: '/api/v1/auth/ued', maxAge: UED_CHALLENGE_TTL_MS };
 const loginLimit = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-8', legacyHeaders: false,
   message: { error: { code: 'UED_LOGIN_RATE_LIMIT' } } });
-// A started challenge owns a real Chromium context for up to ten minutes.
+// A started challenge owns a real Chromium context for up to five minutes.
 // Bound starts separately from CAPTCHA submissions so one client cannot hold
 // every browser slot with a handful of abandoned challenges.
 const challengeStartLimit = rateLimit({ windowMs: 10 * 60_000, limit: 3, standardHeaders: 'draft-8', legacyHeaders: false,

@@ -35,6 +35,8 @@
     "test:e2e:inner": "npm run build && playwright test",
     "test:integration": "node scripts/run-with-project-env.mjs test:integration:inner",
     "test:integration:inner": "node scripts/test-integration.mjs",
+    "smoke:production": "node scripts/run-with-project-env.mjs smoke:production:inner",
+    "smoke:production:inner": "node scripts/smoke-production.mjs",
     "test:inner": "npm run test --workspaces --if-present",
     "db:generate": "node scripts/run-with-project-env.mjs db:generate:inner",
     "db:generate:inner": "npm run db:generate --workspace @personal-schedule/database",
@@ -55,5 +57,10 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "railway": "^3.11.0"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.0": true
   }
 }

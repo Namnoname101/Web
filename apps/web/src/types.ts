@@ -15,6 +15,8 @@ export interface Task {
   priority: 'HIGH' | 'MEDIUM' | 'LOW'; status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   isSplittable: boolean; isScheduled: boolean; scheduleBlocks?: ScheduleBlock[];
 }
+export interface TaskHistoryPage { hasMore: boolean; nextCursor: string | null }
+export interface TaskStats { active: number; completed: number; cancelled: number }
 export interface ScheduleBlock {
   id: string; taskId: string; startTime: string; endTime: string; location: string | null;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'; task?: Task;
@@ -41,6 +43,8 @@ export interface Suggestion {
 export interface Notification { id: string; titleVi: string; titleEn: string; bodyVi: string; bodyEn: string; readAt: string | null; createdAt: string }
 export interface Integration { id?: string; provider: 'UED' | 'OUTLOOK'; status: 'CONNECTED' | 'REAUTH_REQUIRED' | 'ERROR' | 'DISCONNECTED'; lastSyncAt: string | null; lastError?: string | null; cursor?: { uedTerm?: { academicYear: number; semester: number }; uedTermMode?: 'CURRENT' | 'SELECTED'; uedTermChoices?: { academicYears: { value: number | string; label: string }[]; semesters: { value: number | string; label: string }[]; selected: { academicYear: number; semester: number } }; [key: string]: unknown } }
 export interface AcademicRecord { id: string; category: string; title: string; data: Record<string, unknown>; syncedAt: string }
-export interface Bootstrap { user: User; events: CalendarEvent[]; blocks: ScheduleBlock[]; tasks: Task[]; suggestions: Suggestion[]; notifications: Notification[]; integrations: Integration[]; academicRecords: AcademicRecord[]; agendaOverview: AgendaOverview }
+export interface Bootstrap { user: User; events: CalendarEvent[]; blocks: ScheduleBlock[]; tasks: Task[]; taskHistoryPage: TaskHistoryPage; taskStats: TaskStats; suggestions: Suggestion[]; notifications: Notification[]; integrations: Integration[]; academicRecords: AcademicRecord[]; agendaOverview: AgendaOverview }
+export interface TaskBlocksResponse { blocks: ScheduleBlock[]; hasFutureBlocks: boolean; page: TaskHistoryPage }
+export interface TaskHistoryResponse { tasks: Task[]; page: Pick<TaskHistoryPage, 'hasMore' | 'nextCursor'> }
 export interface AuthConfig { demoEnabled: boolean; microsoftEnabled: boolean; uedEnabled: boolean }
 export interface AgendaItem { id: string; title: string; startTime: string; endTime: string; location: string | null; kind: 'CLASS' | 'PERSONAL' | 'DEADLINE' | 'TASK'; event?: CalendarEvent; task?: Task; block?: ScheduleBlock }

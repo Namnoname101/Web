@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH?.trim();
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
@@ -8,6 +10,7 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   reporter: [['list']],
   outputDir: 'test-results',
+  globalTeardown: './scripts/e2e-teardown.mjs',
   use: {
     baseURL: 'http://127.0.0.1:3100',
     trace: 'retain-on-failure',
@@ -15,7 +18,13 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(executablePath ? { launchOptions: { executablePath } } : {}),
+      },
+    },
   ],
   webServer: {
     command: 'node scripts/e2e-server.mjs',

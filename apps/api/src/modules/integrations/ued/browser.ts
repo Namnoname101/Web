@@ -1,14 +1,21 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { hash, token } from '../../../lib/crypto.js';
 import { ApiError } from '../../../lib/errors.js';
+import { AdmissionGate } from '../../../lib/admission-gate.js';
 import { UED_LOGIN_PATH, UED_ORIGIN, trustedUedUrl, type UedAdapter, type UedRecord, mapUedRows,
   type UedTerm, type UedTermChoices, type UedTermOption, type UedWeekRange, mapUedWeekRanges, mapUedCurrentTerm } from './adapter.js';
 
 export type UedStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
-const CHALLENGE_TTL_MS = 10 * 60_000;
+export const UED_CHALLENGE_TTL_MS = 5 * 60_000;
+export const UED_CONTEXT_CLOSE_TIMEOUT_MS = 3_000;
 const MAX_CONTEXTS = 6;
+const MAX_LOGIN_CHALLENGES = 3;
 let browserPromise: Promise<Browser> | undefined;
 let contextCount = 0;
+const loginChallengeAdmission = new AdmissionGate(MAX_LOGIN_CHALLENGES);
+const startingLoginAdmissions = new Set<() => void>();
+let lifecycleGeneration = 0;
+let shutdownPending: Promise<void> | undefined;
 
 interface PortalContext {
   context: BrowserContext; page: Page;
@@ -21,8 +28,22 @@ interface LoginChallenge {
   id: string; browserHash: string; userId?: string; expiresAt: number;
   adapter: UedAdapter; portal: PortalContext; busy: boolean; attempts: number;
   timer: ReturnType<typeof setTimeout>;
+  releaseAdmission: () => void;
 }
 const challenges = new Map<string, LoginChallenge>();
+
+async function closeBrowserContext(context: BrowserContext): Promise<void> {
+  let reachedDeadline = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const closing = Promise.resolve().then(() => context.close()).catch(() => undefined);
+  const deadline = new Promise<void>(resolve => {
+    timer = setTimeout(() => { reachedDeadline = true; resolve(); }, UED_CONTEXT_CLOSE_TIMEOUT_MS);
+    timer.unref();
+  });
+  await Promise.race([closing, deadline]);
+  if (timer) clearTimeout(timer);
+  if (reachedDeadline) console.warn('UED browser context close deadline reached.');
+}
 
 async function browser(): Promise<Browser> {
   browserPromise ??= chromium.launch({ headless: true }).then(instance => {
@@ -111,8 +132,8 @@ async function openPortal(adapter: UedAdapter, storageState?: UedStorageState): 
       async close() {
         if (closed) return;
         closed = true;
-        contextCount--;
-        await context!.close().catch(() => undefined);
+        try { await closeBrowserContext(context!); }
+        finally { contextCount--; }
       },
     };
     await context.route('**/*', async route => {
@@ -136,8 +157,8 @@ async function openPortal(adapter: UedAdapter, storageState?: UedStorageState): 
     page.on('dialog', dialog => { void dialog.dismiss(); });
     return portal;
   } catch (error) {
-    contextCount--;
-    await context?.close().catch(() => undefined);
+    try { if (context) await closeBrowserContext(context); }
+    finally { contextCount--; }
     throw error;
   }
 }
@@ -185,16 +206,36 @@ export async function closeChallenge(browserToken?: string): Promise<void> {
   if (!challenge) return;
   challenges.delete(challenge.browserHash);
   clearTimeout(challenge.timer);
-  await challenge.portal.close();
+  try { await challenge.portal.close(); }
+  finally { challenge.releaseAdmission(); }
 }
 
 export async function startUedLogin(adapter: UedAdapter, userId?: string) {
+  if (shutdownPending) throw new ApiError(503, 'UED_BROWSER_SHUTTING_DOWN');
+  // Public login starts must never consume all browser contexts needed by
+  // connected students' background timetable syncs.
+  const releaseAdmission = loginChallengeAdmission.tryAcquire();
+  if (!releaseAdmission) throw new ApiError(429, 'UED_CHALLENGE_CAPACITY');
+  const generation = lifecycleGeneration;
+  startingLoginAdmissions.add(releaseAdmission);
   const browserToken = token();
   const browserHash = hash(browserToken);
-  const portal = await openPortal(adapter);
+  let portal: PortalContext;
+  try {
+    portal = await openPortal(adapter);
+    if (generation !== lifecycleGeneration) {
+      await portal.close();
+      throw new ApiError(503, 'UED_BROWSER_SHUTTING_DOWN');
+    }
+  } catch (error) {
+    releaseAdmission();
+    throw error;
+  } finally {
+    startingLoginAdmissions.delete(releaseAdmission);
+  }
   const challenge: LoginChallenge = { id: token(), browserHash, userId, adapter, portal,
-    expiresAt: Date.now() + CHALLENGE_TTL_MS, attempts: 0, busy: false,
-    timer: setTimeout(() => { void closeChallenge(browserToken); }, CHALLENGE_TTL_MS) };
+    expiresAt: Date.now() + UED_CHALLENGE_TTL_MS, attempts: 0, busy: false, releaseAdmission,
+    timer: setTimeout(() => { void closeChallenge(browserToken); }, UED_CHALLENGE_TTL_MS) };
   challenge.timer.unref();
   challenges.set(browserHash, challenge);
   try {
@@ -211,7 +252,11 @@ export async function submitUedLogin(browserToken: string | undefined, input: {
   challengeId: string; studentId: string; password: string; captcha?: string;
 }, userId?: string) {
   const challenge = browserToken ? challenges.get(hash(browserToken)) : undefined;
-  if (!challenge || challenge.id !== input.challengeId || challenge.expiresAt <= Date.now() || challenge.userId !== userId) {
+  if (!challenge || challenge.id !== input.challengeId || challenge.userId !== userId) {
+    throw new ApiError(410, 'UED_CHALLENGE_EXPIRED');
+  }
+  if (challenge.expiresAt <= Date.now()) {
+    await closeChallenge(browserToken);
     throw new ApiError(410, 'UED_CHALLENGE_EXPIRED');
   }
   if (challenge.busy) throw new ApiError(409, 'UED_LOGIN_IN_PROGRESS');
@@ -250,6 +295,12 @@ export async function submitUedLogin(browserToken: string | undefined, input: {
     const result = { status: 'VERIFIED' as const, identity, storageState };
     await closeChallenge(browserToken);
     return result;
+  } catch (error) {
+    // Missing CAPTCHA and an ordinary rejected credential return above and
+    // remain retryable. Exceptions indicate a changed/unknown portal state;
+    // discard that context so it cannot retain scarce global capacity.
+    await closeChallenge(browserToken);
+    throw error;
   } finally {
     challenge.busy = false;
     challenge.portal.allowLoginPost = false;
@@ -266,9 +317,7 @@ async function selectChoices(page: Page, selector: string, errorCode = 'UED_TERM
   const fail = async () => {
     // Selector names and current path are safe operational metadata. Never log
     // option values, page text, query strings, cookies or hidden form tokens.
-    console.warn('UED mapping control unavailable', { errorCode,
-      path: new URL(page.url()).pathname, title: (await page.title()).slice(0, 120),
-      selectIds: await page.locator('select').evaluateAll(elements => elements.slice(0, 40).map(element => element.id || '(no-id)')) });
+    console.warn('UED mapping control unavailable', { errorCode, path: new URL(page.url()).pathname });
     throw new ApiError(502, errorCode);
   };
   await control.waitFor({ state: 'visible' }).catch(fail);
@@ -374,12 +423,23 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
 }
 
 export async function shutdownUed(): Promise<void> {
-  await Promise.all([...challenges.values()].map(async challenge => {
-    clearTimeout(challenge.timer);
-    await challenge.portal.close();
-  }));
-  challenges.clear();
-  const running = browserPromise;
-  browserPromise = undefined;
-  await running?.then(instance => instance.close()).catch(() => undefined);
+  if (shutdownPending) return shutdownPending;
+  lifecycleGeneration++;
+  const pendingAdmissions = [...startingLoginAdmissions];
+  startingLoginAdmissions.clear();
+  pendingAdmissions.forEach(release => release());
+  const work = (async () => {
+    const openChallenges = [...challenges.values()];
+    challenges.clear();
+    await Promise.all(openChallenges.map(async challenge => {
+      clearTimeout(challenge.timer);
+      try { await challenge.portal.close(); }
+      finally { challenge.releaseAdmission(); }
+    }));
+    const running = browserPromise;
+    browserPromise = undefined;
+    await running?.then(instance => instance.close()).catch(() => undefined);
+  })();
+  shutdownPending = work.finally(() => { shutdownPending = undefined; });
+  return shutdownPending;
 }

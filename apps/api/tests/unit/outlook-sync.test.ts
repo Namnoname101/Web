@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fixture = vi.hoisted(() => ({
   prisma: {} as any,
@@ -24,6 +24,11 @@ const seen = new Set<string>();
 const message = { id: 'immutable-mail-1', subject: 'Giải tích 1 nghỉ học ngày 14/09/2026', body: { contentType: 'text', content: 'Thông báo nghỉ học.' } };
 
 beforeEach(() => {
+  // Keep mailbox-history assertions stable when this suite runs after the
+  // fixture's 14/09/2026 class date. Production deliberately ignores notices
+  // for calendar days that are already over in the student's timezone.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-09-14T05:00:00.000Z'));
   vi.clearAllMocks();
   fixture.graphGet.mockReset();
   fixture.requestTokens.mockReset();
@@ -53,6 +58,8 @@ beforeEach(() => {
     notification: { createMany: vi.fn(async () => ({ count: 1 })), upsert: vi.fn(async () => ({})) },
   };
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('Outlook mailbox sync and concurrent disconnect', () => {
   it('scans the whole mailbox and overlaps the previous watermark without rebuilding paging tokens', () => {

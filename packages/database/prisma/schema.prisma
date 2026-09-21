@@ -141,6 +141,7 @@ model Task {
   @@unique([id, userId], map: "uq_tasks_id_user")
   @@index([userId, priority, deadline], map: "ix_tasks_scheduling_queue")
   @@index([userId, deadline], map: "ix_tasks_user_deadline")
+  @@index([userId, status, updatedAt, id], map: "ix_tasks_user_status_history")
   @@map("tasks")
 }
 
@@ -160,6 +161,7 @@ model TaskScheduleBlock {
   @@unique([taskId, startTime, endTime], map: "uq_task_schedule_blocks_exact_slot")
   @@index([userId, startTime, endTime], map: "ix_task_schedule_blocks_user_time")
   @@index([taskId, status], map: "ix_task_schedule_blocks_task_status")
+  @@index([userId, taskId, startTime, id], map: "ix_task_schedule_blocks_user_task_history")
   @@map("task_schedule_blocks")
 }
 

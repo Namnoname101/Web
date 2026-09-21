@@ -20,6 +20,9 @@ trong mã với tính năng đã được nghiệm thu bằng dịch vụ thật
   Suggestions, Integrations, Notifications và Settings Việt/Anh đã chạy trong
   trình duyệt. Danh sách UED hiển thị/sắp xếp/lọc theo ngày, giờ, phòng và học
   kỳ; trang nhiều dữ liệu đã được nghiệm thu ở desktop và viewport 390×844.
+  Lịch trình trong ngày tính cả hoạt động đã kết thúc, phân biệt rõ “Đã qua”,
+  “Đang diễn ra”, “Sắp tới”, giữ lịch sử gần đây và tự chuyển ngày theo múi giờ
+  sinh viên mà không kéo người dùng khỏi tuần cũ họ đang chủ động xem.
 - [ ] **M4 — Outlook thật.** OAuth PKCE, quét toàn mailbox có phân trang,
   parser Việt/Anh, worker, thông báo và đề xuất đã có trong mã/test; chưa có
   cấu hình Microsoft thật để nghiệm thu đăng nhập và mailbox end-to-end.
@@ -30,8 +33,11 @@ trong mã với tính năng đã được nghiệm thu bằng dịch vụ thật
   được nghiệm thu riêng trên bản sao bằng database `_test`.
 - [ ] **M6 — Phát hành.** Build/typecheck và các suite unit/integration chính
   đã chạy đạt trong quá trình phát triển; đã có Dockerfile, Railway IaC hiện
-  hành và runbook Railway/Fly. Còn cần build/smoke image trên máy có Docker,
-  cấu hình tài khoản/domain/secrets và nghiệm thu bản triển khai thật.
+  hành, runbook Railway/Fly và smoke test chạy ứng dụng đúng chế độ production
+  với database `_test`. Workflow Pages tĩnh không tương thích đã được loại bỏ;
+  frontend và API sẽ phát hành cùng một HTTPS origin. Còn cần build/smoke image
+  trên máy có Docker, cấu hình tài khoản/domain/secrets và nghiệm thu bản triển
+  khai thật.
 
 ## Bằng chứng UED thật gần nhất
 
@@ -65,11 +71,19 @@ ghi trên cổng trường:
   nhánh CAPTCHA. Chế độ học kỳ `SELECTED` đã có mã và test nhưng chưa smoke
   bằng một học kỳ cũ trên portal thật.
 
-Regression gần nhất ngày 14/09/2026: 116 unit test đạt (105 API + 11 web),
-8 integration test đạt, typecheck toàn monorepo (kể cả Railway IaC) đạt,
-2 browser E2E đạt trên database `_test` cô lập (luồng tạo task → xem trước →
-accept và viewport 390×844), production build đạt và `npm audit --omit=dev`
-báo 0 lỗ hổng đã biết.
+Regression gần nhất ngày 15/09/2026: 151 unit test đạt (131 API + 20 web),
+15 integration test đạt, typecheck toàn monorepo (kể cả Railway IaC) đạt và
+3 browser E2E đạt trên database `_test` cô lập. Browser suite kiểm tra luồng tạo
+task → xem trước → accept, viewport 390×844, và một hoạt động kết thúc sớm hơn
+trong ngày vẫn được tính ở “Hôm nay”, xuất hiện ở lịch sử “Đã qua” với dấu hiệu
+trực quan. Production build và production smoke (config, PostgreSQL, security
+headers, React static entry) đều đạt; lần kiểm tra dependency production gần
+nhất với `npm audit --omit=dev` báo 0 lỗ hổng đã biết.
+
+API và worker hiện đóng theo pha khi nhận `SIGINT`/`SIGTERM`: ngừng nhận request
+và tick mới, chờ request đang chạy trong giới hạn, đóng trình duyệt UED rồi mới
+ngắt Prisma. Tín hiệu lặp dùng chung một tiến trình cleanup; deadline cứng ngăn
+instance treo vô hạn và lỗi shutdown chỉ log metadata an toàn.
 
 Không đưa mã sinh viên, mật khẩu, cookie, token, họ tên hoặc dữ liệu lớp cụ thể
 của người thử vào tài liệu hay fixture.

@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/stack-React%20%2B%20Express%20%2B%20PostgreSQL-4CAF50?style=flat-square" />
-  <img src="https://img.shields.io/github/actions/workflow/status/Namnoname101/Web/pages.yml?style=flat-square&label=deploy" />
+  <img src="https://img.shields.io/github/actions/workflow/status/Namnoname101/Web/ci.yml?style=flat-square&label=CI" />
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" />
 </p>
 
@@ -10,7 +10,7 @@
 
 *A personal schedule manager for UED students. It pulls your timetable from the university portal, then fits your study sessions around it. Everything the planner suggests, you decide.*
 
-**→ [Xem demo / Live preview](https://namnoname101.github.io/Web/)**
+**→ Chạy bản đầy đủ tại `http://localhost:5173`, hoặc triển khai container lên Railway/Fly.**
 
 ---
 
@@ -30,7 +30,7 @@ Frontend   React 19 + TailwindCSS + Vite
 Backend    Express + TypeScript
 Database   PostgreSQL + Prisma
 Auth       UED session  ·  Microsoft OAuth PKCE
-Test       Vitest + Playwright  (144 unit · 15 integration · 3 E2E)
+Test       Vitest + Playwright  (151 unit · 15 integration · 3 E2E)
 ```
 
 ## Chạy local
@@ -66,6 +66,7 @@ npm run test:integration   # integration tests
 npm run test:e2e           # browser tests (Playwright)
 npm run typecheck
 npm run build
+npm run smoke:production   # chạy sau build, kiểm tra đúng chế độ production
 ```
 
 Tất cả test dùng database `_test` riêng, không đụng dữ liệu thật.
@@ -82,9 +83,11 @@ Chi tiết: [`docs/PROGRESS.md`](docs/PROGRESS.md) · API contract: [`docs/API.m
 
 ## Deploy
 
-Frontend tự động lên GitHub Pages mỗi khi push vào `main`.
-
-Backend cần server riêng — xem [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) để biết cách deploy lên Railway hoặc Fly.io. Config Railway có sẵn ở `.railway/`, Dockerfile có ở root.
+React và Express được phát hành cùng một HTTPS origin trong container. Không
+tách frontend đã đăng nhập sang GitHub Pages vì cookie phiên, bảo vệ CSRF và
+callback Outlook cần cùng origin. Xem [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+để triển khai đầy đủ lên Railway hoặc Fly.io; cấu hình Railway có sẵn ở
+`.railway/`, Dockerfile ở thư mục gốc.
 
 ---
 

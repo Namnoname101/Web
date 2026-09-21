@@ -41,7 +41,7 @@ export function agendaItems(
   return [...eventItems, ...blockItems].sort(byStart);
 }
 
-export function temporalState(item: AgendaItem, now: number): AgendaTemporalState {
+export function temporalState(item: Pick<AgendaItem, 'startTime' | 'endTime'>, now: number): AgendaTemporalState {
   if (timestamp(item.endTime) <= now) return 'PAST';
   if (timestamp(item.startTime) <= now) return 'CURRENT';
   return 'UPCOMING';

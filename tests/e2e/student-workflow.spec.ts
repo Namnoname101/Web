@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 interface BootstrapState {
   tasks: Array<{ id: string; title: string; isScheduled: boolean }>;
   blocks: Array<{ taskId: string; startTime: string; endTime: string }>;
-  agendaOverview?: { dayStart: string };
+  agendaOverview?: { dayStart: string; asOf: string };
 }
 
 async function bootstrap(page: import('@playwright/test').Page): Promise<BootstrapState> {
@@ -17,9 +17,9 @@ async function bootstrap(page: import('@playwright/test').Page): Promise<Bootstr
 test('student reviews an automatic plan before it changes the calendar', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
-  await expect(page.getByRole('button', { name: 'Công việc' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Công việc', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Công việc' }).click();
+  await page.getByRole('button', { name: 'Công việc', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Danh sách công việc' })).toBeVisible();
 
   const title = `E2E ôn tập ${Date.now()}`;
@@ -57,7 +57,7 @@ test('student reviews an automatic plan before it changes the calendar', async (
   expect(minutes).toBe(30);
 
   await page.getByRole('button', { name: 'VI', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Tasks' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible();
 });
 
 test('student workspace fits a 390px mobile viewport', async ({ page }) => {
@@ -66,10 +66,12 @@ test('student workspace fits a 390px mobile viewport', async ({ page }) => {
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
   await expect(page.getByRole('heading', { name: /Một ngày/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Lịch trình hôm nay' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Hôm nay/ })).toBeVisible();
-  await page.getByRole('tab', { name: /^Sắp tới/ }).click();
+  const todayTab = page.getByRole('tab', { name: /^Hôm nay/ });
+  await expect(todayTab).toBeVisible();
+  await todayTab.focus();
+  await todayTab.press('ArrowRight');
   await expect(page.getByRole('tab', { name: /^Sắp tới/ })).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('tab', { name: /^Đã qua/ }).click();
+  await page.getByRole('tab', { name: /^Sắp tới/ }).press('End');
   await expect(page.getByRole('tab', { name: /^Đã qua/ })).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.getByRole('button', { name: 'Mở menu' }).click();
@@ -82,10 +84,15 @@ test('an activity that ended earlier today remains in Today and Past', async ({ 
   await page.goto('/');
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
   await expect(page.getByRole('heading', { name: 'Lịch trình hôm nay' })).toBeVisible();
-  const state = await bootstrap(page);
-  const dayStart = Date.parse(state.agendaOverview!.dayStart);
-  const endTime = new Date(Date.now() - 60_000);
-  const startTime = new Date(Math.max(dayStart, +endTime - 30 * 60_000));
+  let state = await bootstrap(page);
+  // At exact midnight wait for a positive overlap, using server time instead
+  // of skipping the regression or trusting the machine running the browser.
+  await expect.poll(async () => {
+    state = await bootstrap(page);
+    return Date.parse(state.agendaOverview!.asOf) > Date.parse(state.agendaOverview!.dayStart);
+  }).toBe(true);
+  const endTime = new Date(state.agendaOverview!.asOf);
+  const startTime = new Date(+endTime - 30 * 60_000);
   expect(+endTime).toBeGreaterThan(+startTime);
 
   const title = `Lịch đã qua hôm nay ${Date.now()}`;
