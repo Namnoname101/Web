@@ -30,7 +30,7 @@ Frontend   React 19 + TailwindCSS + Vite
 Backend    Express + TypeScript
 Database   PostgreSQL + Prisma
 Auth       UED session  ·  Microsoft OAuth PKCE
-Test       Vitest + Playwright  (151 unit · 15 integration · 3 E2E)
+Test       Vitest + Playwright  (180 unit · 17 integration · 5 E2E)
 ```
 
 ## Chạy local
