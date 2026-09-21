@@ -7,7 +7,9 @@ import UedConnect from './UedConnect';
 import { api, ApiError, calendarRollover, dayStart, errorMessage, formatDate, localDay, monday, shiftDay } from './lib';
 import { isSuggestionPending } from './suggestions';
 import { agendaItems } from './agenda';
-import type { AgendaItem, AuthConfig, Bootstrap, CalendarEvent, Locale, Suggestion, Task, User, View } from './types';
+import { ServerClock } from './server-clock';
+import { appendUniqueTasks, preserveExpandedHistory } from './task-history';
+import type { AgendaItem, AuthConfig, Bootstrap, CalendarEvent, Locale, Suggestion, Task, TaskHistoryResponse, User, View } from './types';
 
 type Dialog = { kind: 'task'; task?: Task } | { kind: 'event'; event?: CalendarEvent } | { kind: 'task-detail'; task: Task } | { kind: 'event-detail'; event: CalendarEvent } | { kind: 'proposal'; suggestion: Suggestion } | { kind: 'plan' } | { kind: 'ued' } | null;
 const validViews: View[] = ['dashboard', 'calendar', 'tasks', 'suggestions', 'notifications', 'integrations', 'settings'];
@@ -23,19 +25,35 @@ export default function App() {
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [menu, setMenu] = useState(false), [dialog, setDialog] = useState<Dialog>(null);
   const [week, setWeek] = useState(monday(localDay('Asia/Ho_Chi_Minh'))), [selectedDay, setSelectedDay] = useState(localDay('Asia/Ho_Chi_Minh'));
   const [now, setNow] = useState(() => Date.now());
+  const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
   const requestNumber = useRef(0);
   const trackedToday = useRef<{ userId: string; day: string } | null>(null);
+  const clock = useRef(new ServerClock());
+  const expandedTaskHistory = useRef(false);
+  const historyRequest = useRef(0);
+  const lastForegroundRefresh = useRef(0);
   const t: Translate = (vi, en) => locale === 'vi' ? vi : en;
   const chooseLocale = (value: Locale) => { setLocale(value); try { localStorage.setItem('schedule-locale', value); } catch { /* Browser storage is optional. */ } };
-  const identify = (value: User) => { setUser(value); chooseLocale(value.locale); const day = localDay(value.timezone); setWeek(monday(day)); setSelectedDay(day); };
+  const identify = (value: User) => {
+    expandedTaskHistory.current = false; historyRequest.current++; setTaskHistoryLoading(false);
+    const instant = clock.current.now();
+    const day = localDay(value.timezone, instant);
+    trackedToday.current = { userId: value.id, day };
+    setNow(instant); setUser(value); chooseLocale(value.locale); setWeek(monday(day)); setSelectedDay(day);
+  };
   const bootstrap = useCallback(async () => {
     if (!user) return;
     const request = ++requestNumber.current;
+    const requestStartedAt = performance.now();
     const params = new URLSearchParams({ fromDate: dayStart(week, user.timezone), toDate: dayStart(shiftDay(week, 7), user.timezone) });
     try {
       const result = await api<Bootstrap>(`/bootstrap?${params}`);
       if (request !== requestNumber.current) return;
-      setData(result); setUser(previous => previous?.id === result.user.id ? result.user : previous);
+      const responseReceivedAt = performance.now();
+      if (clock.current.synchronize(result.agendaOverview.asOf, requestStartedAt, responseReceivedAt)) {
+        setNow(clock.current.now());
+      }
+      setData(current => expandedTaskHistory.current ? preserveExpandedHistory(current, result) : result); setUser(previous => previous?.id === result.user.id ? result.user : previous);
     } catch (err) {
       if (request !== requestNumber.current) return;
       if (err instanceof ApiError && err.status === 401) { setUser(null); setData(null); setDialog(null); }
@@ -61,8 +79,36 @@ export default function App() {
     const interval = setInterval(() => { if (document.visibilityState === 'visible' && !busy && !dialog) void bootstrap().catch(() => undefined); }, 30_000);
     return () => clearInterval(interval);
   }, [bootstrap, user?.id, busy, dialog]);
+  useEffect(() => {
+    if (!user) return;
+    const refreshForeground = () => {
+      if (document.visibilityState !== 'visible') return;
+      const deviceNow = performance.now();
+      setNow(clock.current.now());
+      // Browsers commonly emit focus and visibilitychange together.
+      if (deviceNow - lastForegroundRefresh.current < 750) return;
+      lastForegroundRefresh.current = deviceNow;
+      if (!busy && !dialog) void bootstrap().catch(err => setError(errorMessage(err, locale)));
+    };
+    document.addEventListener('visibilitychange', refreshForeground);
+    window.addEventListener('focus', refreshForeground);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshForeground);
+      window.removeEventListener('focus', refreshForeground);
+    };
+  }, [bootstrap, busy, dialog, locale, user?.id]);
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
-  useEffect(() => { const interval = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(interval); }, []);
+  useEffect(() => {
+    // Update badges at activity boundaries as well as periodically; do not wait
+    // for a network refresh to mark a just-ended activity as past.
+    const instant = clock.current.now();
+    const items = data ? [...data.events, ...data.blocks, ...data.agendaOverview.today.events, ...data.agendaOverview.today.blocks] : [];
+    const boundaries = items.flatMap(item => [Date.parse(item.startTime), Date.parse(item.endTime)]);
+    if (user) boundaries.push(Date.parse(dayStart(shiftDay(localDay(user.timezone, instant), 1), user.timezone)));
+    const next = Math.min(instant + 30_000, ...boundaries.filter(value => value > instant));
+    const timer = setTimeout(() => setNow(clock.current.now()), Math.max(1, next - instant + 1));
+    return () => clearTimeout(timer);
+  }, [data, now, user?.timezone]);
   useEffect(() => {
     if (!user) { trackedToday.current = null; return; }
 
@@ -90,23 +136,39 @@ export default function App() {
     if (query.get('outlook') === 'connected') setToast(t('Outlook đã được kết nối.', 'Outlook is connected.'));
     if (query.has('authError') || query.has('outlook')) history.replaceState(null, '', `${location.pathname}${location.hash}`);
   }, []);
-  const navigate = (next: View) => { location.hash = next; setView(next); setMenu(false); if (next === 'dashboard' && user) { const day = localDay(user.timezone); setWeek(monday(day)); setSelectedDay(day); } };
+  const navigate = (next: View) => { location.hash = next; setView(next); setMenu(false); if (next === 'dashboard' && user) { const day = localDay(user.timezone, now); setWeek(monday(day)); setSelectedDay(day); } };
   const refresh = async () => { setLoading(true); setError(''); try { await bootstrap(); } catch (err) { setError(errorMessage(err, locale)); } finally { setLoading(false); } };
   const mutate = async (path: string, method: string, body?: unknown, message?: string) => {
     const result = await api(path, method, body);
     await bootstrap(); if (message) setToast(message); return result;
   };
+  const loadMoreTaskHistory = async () => {
+    const cursor = data?.taskHistoryPage.nextCursor;
+    const owner = user?.id;
+    if (!cursor || taskHistoryLoading) return;
+    const request = ++historyRequest.current;
+    setTaskHistoryLoading(true); setError('');
+    try {
+      const result = await api<TaskHistoryResponse>(`/tasks/history?cursor=${encodeURIComponent(cursor)}`);
+      setData(current => {
+        if (!current || current.user.id !== owner || historyRequest.current !== request || current.taskHistoryPage.nextCursor !== cursor) return current;
+        expandedTaskHistory.current = true;
+        return { ...current, tasks: appendUniqueTasks(current.tasks, result.tasks),
+          taskHistoryPage: { ...current.taskHistoryPage, ...result.page } };
+      });
+    } catch (err) { if (request === historyRequest.current) setError(errorMessage(err, locale)); }
+    finally { if (request === historyRequest.current) setTaskHistoryLoading(false); }
+  };
   const globalAction = async (action: () => Promise<unknown>) => { setBusy(true); setError(''); try { await action(); } catch (err) { setError(errorMessage(err, locale)); } finally { setBusy(false); } };
   const close = useCallback(() => setDialog(null), []);
   const beginDemo = () => globalAction(async () => { identify((await api<{ user: User }>('/auth/demo', 'POST', {})).user); navigate('dashboard'); });
-  const logout = () => globalAction(async () => { await api('/auth/logout', 'POST', {}); requestNumber.current++; setUser(null); setData(null); setDialog(null); setMenu(false); });
+  const logout = () => globalAction(async () => { await api('/auth/logout', 'POST', {}); requestNumber.current++; historyRequest.current++; expandedTaskHistory.current = false; setTaskHistoryLoading(false); setUser(null); setData(null); setDialog(null); setMenu(false); });
   const showTask = (task: Task) => setDialog({ kind: 'task-detail', task });
   const showAgenda = (item: AgendaItem) => item.event ? setDialog({ kind: 'event-detail', event: item.event }) : item.task && showTask(item.task);
   const days = Array.from({ length: 7 }, (_, index) => shiftDay(week, index));
   const agenda: AgendaItem[] = data ? agendaItems(data.events, data.blocks, data.tasks, t('Phiên tự học', 'Study session')) : [];
   const forDay = (day: string) => agenda.filter(item => Date.parse(item.startTime) < Date.parse(dayStart(shiftDay(day, 1), user!.timezone)) && Date.parse(item.endTime) > Date.parse(dayStart(day, user!.timezone)));
-  const suggestionsNow = Date.now();
-  const waiting = data?.suggestions.filter(suggestion => isSuggestionPending(suggestion, suggestionsNow)) || [], unread = data?.notifications.filter(item => !item.readAt).length || 0;
+  const waiting = data?.suggestions.filter(suggestion => isSuggestionPending(suggestion, now)) || [], unread = data?.notifications.filter(item => !item.readAt).length || 0;
   const nav = [
     { id: 'dashboard' as View, icon: LayoutDashboard, label: t('Tổng quan', 'Overview') },
     { id: 'calendar' as View, icon: CalendarDays, label: t('Lịch của tôi', 'My calendar') },
@@ -131,7 +193,7 @@ export default function App() {
     <a className="skip-link" href="#main-content">{t('Đến nội dung chính', 'Skip to content')}</a>
     {menu && <button className="sidebar-overlay" aria-label={t('Đóng menu', 'Close menu')} onClick={() => setMenu(false)} />}
     <aside className={`sidebar ${menu ? 'is-open' : ''}`}><Brand /><button className="icon-button sidebar-close" onClick={() => setMenu(false)} aria-label={t('Đóng menu', 'Close menu')}><X size={20} /></button><div className="workspace-label"><span className="workspace-mark"><GraduationCap size={19} /></span><span><strong>UED Workspace</strong><small>{t('Không gian sinh viên', 'Your student space')}</small></span></div><span className="nav-section-label">{t('KHÔNG GIAN CỦA BẠN', 'YOUR WORKSPACE')}</span><nav aria-label={t('Điều hướng chính', 'Main navigation')}>{nav.map(item => <button key={item.id} className={`nav-item ${view === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)} aria-current={view === item.id ? 'page' : undefined}><item.icon size={19} /><span>{item.label}</span>{!!item.count && <span className="nav-count">{item.count > 99 ? '99+' : item.count}</span>}</button>)}</nav><div className="sidebar-bottom"><div className="routine-note"><Coffee size={22} /><strong>{t('Cả nghỉ ngơi cũng quan trọng.', 'Rest is part of the plan.')}</strong><p>{t('Chúng mình luôn giữ khoảng nghỉ trong lịch gợi ý của bạn.', 'Your breaks stay protected in every suggested plan.')}</p><button className="text-link" onClick={() => navigate('settings')}>{t('Nhịp sinh hoạt của tôi', 'My daily routine')}<ArrowRight size={13} /></button></div><div className="profile"><span className="avatar">{user.name.trim().split(/\s+/).slice(-1)[0]?.slice(0, 1).toUpperCase() || 'S'}</span><span><strong>{user.name}</strong><small>{user.isDemo ? t('Tài khoản demo', 'Demo account') : t('Sinh viên UED', 'UED student')}</small></span><button className="icon-button" onClick={logout} disabled={busy} aria-label={t('Đăng xuất', 'Sign out')} title={t('Đăng xuất', 'Sign out')}><LogOut size={17} /></button></div></div></aside>
-    <div className="main-layout"><header className="topbar"><div className="breadcrumb"><button className="icon-button menu-button" aria-label={t('Mở menu', 'Open menu')} onClick={() => setMenu(true)}><Menu size={21} /></button><span className="breadcrumb-home">{t('Không gian của tôi', 'My workspace')}</span><span className="breadcrumb-divider">/</span><strong>{nav.find(item => item.id === view)?.label}</strong></div><div className="topbar-actions"><span className="topbar-date">{formatDate(new Date(), user.timezone, 'EEE, dd MMM', locale)}</span><button className="language-switch" onClick={() => chooseLocale(locale === 'vi' ? 'en' : 'vi')}>{locale === 'vi' ? 'VI' : 'EN'}<ChevronRight size={12} /></button><button className="icon-button notification-button" onClick={() => navigate('notifications')} aria-label={t(`${unread} thông báo chưa đọc`, `${unread} unread notifications`)}><Bell size={19} />{unread > 0 && <span />}</button><span className="mini-avatar">{user.name.trim().slice(0, 1).toUpperCase()}</span></div></header>
+    <div className="main-layout"><header className="topbar"><div className="breadcrumb"><button className="icon-button menu-button" aria-label={t('Mở menu', 'Open menu')} onClick={() => setMenu(true)}><Menu size={21} /></button><span className="breadcrumb-home">{t('Không gian của tôi', 'My workspace')}</span><span className="breadcrumb-divider">/</span><strong>{nav.find(item => item.id === view)?.label}</strong></div><div className="topbar-actions"><span className="topbar-date">{formatDate(new Date(now), user.timezone, 'EEE, dd MMM', locale)}</span><button className="language-switch" onClick={() => chooseLocale(locale === 'vi' ? 'en' : 'vi')}>{locale === 'vi' ? 'VI' : 'EN'}<ChevronRight size={12} /></button><button className="icon-button notification-button" onClick={() => navigate('notifications')} aria-label={t(`${unread} thông báo chưa đọc`, `${unread} unread notifications`)}><Bell size={19} />{unread > 0 && <span />}</button><span className="mini-avatar">{user.name.trim().slice(0, 1).toUpperCase()}</span></div></header>
       <main id="main-content" className="main-content" tabIndex={-1}>
         {user.isDemo && <div className="demo-banner"><span className="badge">DEMO</span><span>{t('Bạn đang trải nghiệm dữ liệu minh họa, chưa đồng bộ với tài khoản trường.', 'You are exploring sample data, not data synced from a school account.')}</span></div>}
         <div className="page-heading"><div><span className="eyebrow">{view === 'dashboard' ? t(`CHÀO ${user.name.trim().split(/\s+/).slice(-1)[0].toUpperCase()}, NGÀY MỚI TỐT LÀNH`, `HELLO ${user.name.trim().split(/\s+/).slice(-1)[0].toUpperCase()}, MAKE TODAY YOURS`) : 'PERSONAL AUTOMATED SCHEDULE'}</span><h1>{titles[view][0]}</h1><p>{titles[view][1]}</p></div><div className="page-heading-actions"><button className="icon-button" onClick={refresh} disabled={loading || busy} aria-label={t('Tải lại dữ liệu', 'Refresh data')} title={t('Tải lại dữ liệu', 'Refresh data')}><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>{['dashboard', 'calendar', 'tasks', 'suggestions'].includes(view) && <button className="button button-primary" onClick={() => setDialog({ kind: 'plan' })} disabled={!data}><Sparkles size={17} />{t('Gợi ý xếp lịch', 'Plan my time')}</button>}</div></div>
@@ -139,8 +201,8 @@ export default function App() {
         {!data ? <section className="panel loading-panel"><Spinner /><p>{t('Đang tải lịch và công việc của bạn…', 'Loading your calendar and tasks…')}</p>{!loading && <button className="button button-secondary" onClick={refresh}>{t('Thử lại', 'Try again')}</button>}</section> : <>
           {view === 'dashboard' && <Dashboard data={data} user={user} locale={locale} t={t} days={days} forDay={forDay} selectedDay={selectedDay} selectDay={setSelectedDay} waiting={waiting} navigate={navigate} showAgenda={showAgenda} showTask={showTask} newTask={() => setDialog({ kind: 'task' })} showSuggestion={suggestion => setDialog({ kind: 'proposal', suggestion })} now={now} />}
           {view === 'calendar' && <CalendarPage data={data} user={user} locale={locale} t={t} days={days} week={week} setWeek={setWeek} selectedDay={selectedDay} setSelectedDay={setSelectedDay} forDay={forDay} showAgenda={showAgenda} addEvent={day => { setSelectedDay(day); setDialog({ kind: 'event' }); }} showEvent={event => setDialog({ kind: 'event-detail', event })} loading={loading} now={now} />}
-          {view === 'tasks' && <TasksPage tasks={data.tasks} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} />}
-          {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} />}
+          {view === 'tasks' && <TasksPage tasks={data.tasks} historyPage={data.taskHistoryPage} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} />}
+          {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} now={now} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} />}
           {view === 'notifications' && <NotificationsPage notifications={data.notifications} user={user} locale={locale} t={t} busy={busy} read={id => globalAction(() => mutate(id ? `/notifications/${id}/read` : '/notifications/read-all', 'POST', {}, t('Đã đánh dấu đã đọc.', 'Marked as read.')))} />}
           {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => { await mutate('/integrations/ued/term', 'PATCH', body, t('Đã đổi học kỳ. Dữ liệu sẽ cập nhật sau khi đồng bộ.', 'Term updated. Records will refresh after syncing.')); }} sync={provider => globalAction(() => mutate(`/integrations/${provider}/sync`, 'POST', {}, t('Đã yêu cầu đồng bộ. Kết quả sẽ tự cập nhật tại đây.', 'Sync requested. Results will update here automatically.')))} disconnect={provider => { if (window.confirm(t(`Ngắt kết nối ${provider}? Các lịch đã chấp nhận vẫn được giữ lại.`, `Disconnect ${provider}? Your accepted calendar events will be kept.`))) void globalAction(() => mutate(`/integrations/${provider}`, 'DELETE', undefined, t('Đã ngắt kết nối.', 'Disconnected.'))); }} />}
           {view === 'settings' && <SettingsPage key={user.id} user={user} locale={locale} t={t} save={async body => { const result = await api<{ user: User }>('/settings', 'PATCH', body); setUser(result.user); chooseLocale(result.user.locale); await bootstrap(); }} />}
@@ -150,11 +212,11 @@ export default function App() {
     </div>
     {toast && <div className="toast" role="status"><CheckCheck size={18} />{toast}<button onClick={() => setToast('')} aria-label={t('Đóng', 'Close')}><X size={15} /></button></div>}
     {dialog?.kind === 'ued' && <UedConnect locale={locale} t={t} connected={value => { identify(value); void refresh(); }} close={close} />}
-    {dialog?.kind === 'task' && <TaskForm task={dialog.task} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await mutate(id ? `/tasks/${id}` : '/tasks', id ? 'PATCH' : 'POST', body, t('Đã lưu công việc.', 'Task saved.')); }} />}
+    {dialog?.kind === 'task' && <TaskForm now={now} task={dialog.task} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await mutate(id ? `/tasks/${id}` : '/tasks', id ? 'PATCH' : 'POST', body, t('Đã lưu công việc.', 'Task saved.')); }} />}
     {dialog?.kind === 'event' && <EventForm event={dialog.event} day={selectedDay} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await mutate(id ? `/events/${id}` : '/events', id ? 'PATCH' : 'POST', body, t('Đã lưu sự kiện.', 'Event saved.')); }} />}
-    {dialog?.kind === 'plan' && <PlanForm user={user} locale={locale} t={t} close={close} propose={async (fromDate, toDate) => { const suggestion = await api<Suggestion>('/scheduling/proposals', 'POST', { fromDate, toDate }); await bootstrap(); setDialog({ kind: 'proposal', suggestion }); }} />}
-    {dialog?.kind === 'proposal' && <SuggestionDetails suggestion={dialog.suggestion} user={user} locale={locale} t={t} close={close} decide={async (id, action) => { await mutate(`/suggestions/${id}/${action}`, 'POST', {}, action === 'accept' ? t('Đã cập nhật lịch theo đề xuất bạn chọn.', 'Your calendar has been updated with your choice.') : t('Đã từ chối đề xuất.', 'Proposal declined.')); }} />}
-    {dialog?.kind === 'task-detail' && <TaskDetails task={data?.tasks.find(task => task.id === dialog.task.id) || dialog.task} user={user} locale={locale} t={t} close={close} edit={task => setDialog({ kind: 'task', task })} status={async (task, status) => { await mutate(`/tasks/${task.id}/status`, 'PATCH', { status }, t('Đã cập nhật trạng thái.', 'Status updated.')); close(); }} unschedule={async task => { await mutate(`/tasks/${task.id}/unschedule`, 'POST', {}, t('Đã bỏ các phiên học chưa bắt đầu. Bạn có thể tạo gợi ý mới.', 'Future sessions removed. You can generate a new plan.')); close(); }} />}
+    {dialog?.kind === 'plan' && <PlanForm now={now} user={user} locale={locale} t={t} close={close} propose={async (fromDate, toDate) => { const suggestion = await api<Suggestion>('/scheduling/proposals', 'POST', { fromDate, toDate }); await bootstrap(); setDialog({ kind: 'proposal', suggestion }); }} />}
+    {dialog?.kind === 'proposal' && <SuggestionDetails now={now} suggestion={dialog.suggestion} user={user} locale={locale} t={t} close={close} decide={async (id, action) => { await mutate(`/suggestions/${id}/${action}`, 'POST', {}, action === 'accept' ? t('Đã cập nhật lịch theo đề xuất bạn chọn.', 'Your calendar has been updated with your choice.') : t('Đã từ chối đề xuất.', 'Proposal declined.')); }} />}
+    {dialog?.kind === 'task-detail' && <TaskDetails key={dialog.task.id} now={now} task={data?.tasks.find(task => task.id === dialog.task.id) || dialog.task} user={user} locale={locale} t={t} close={close} edit={task => setDialog({ kind: 'task', task })} status={async (task, status) => { await mutate(`/tasks/${task.id}/status`, 'PATCH', { status }, t('Đã cập nhật trạng thái.', 'Status updated.')); close(); }} unschedule={async task => { await mutate(`/tasks/${task.id}/unschedule`, 'POST', {}, t('Đã bỏ các phiên học chưa bắt đầu. Bạn có thể tạo gợi ý mới.', 'Future sessions removed. You can generate a new plan.')); close(); }} />}
     {dialog?.kind === 'event-detail' && <EventDetails event={dialog.event} user={user} locale={locale} t={t} close={close} edit={event => setDialog({ kind: 'event', event })} status={async (event, status) => { await mutate(`/events/${event.id}/status`, 'PATCH', { status }, t('Đã cập nhật sự kiện.', 'Event updated.')); close(); }} />}
   </div>;
 }

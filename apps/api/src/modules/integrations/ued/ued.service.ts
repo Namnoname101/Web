@@ -3,6 +3,7 @@ import { decrypt, encrypt, hash } from '../../../lib/crypto.js';
 import { ApiError } from '../../../lib/errors.js';
 import { bumpVersion, withUser } from '../../../lib/transaction.js';
 import { eventInput } from '../../../lib/validation.js';
+import { safeErrorSummary } from '../../../lib/safe-error.js';
 import { getUedAdapter, uedTermSchema, type UedRecord, type UedSchedule, type UedTerm } from './adapter.js';
 import { readUedPortal, type UedStorageState } from './browser.js';
 import { expandTimetable } from './timetable.js';
@@ -35,12 +36,9 @@ function readUedBaselineTerms(cursor: Prisma.JsonObject): Set<string> {
 
 function logUnexpectedUed(stage: 'read' | 'persist', error: unknown) {
   if (error instanceof ApiError) return;
-  const message = error instanceof Error ? error.message : String(error);
-  // Operational clues only: redact URLs, long identifiers and control chars;
-  // never include portal content, request bodies, cookies or stack traces.
-  const safeMessage = message.replace(/https?:\/\/\S+/gi, '[url]').replace(/[A-Za-z0-9_-]{24,}/g, '[identifier]')
-    .replace(/\d{4,}/g, '[number]').replace(/[\r\n\t]+/g, ' ').slice(0, 240);
-  console.warn('Unexpected UED sync failure', { stage, name: error instanceof Error ? error.name : typeof error, message: safeMessage });
+  // Exception messages from a remote page can contain names, courses, URLs,
+  // selectors, cookies or request data. Log only bounded operational metadata.
+  console.warn('Unexpected UED sync failure', { stage, ...safeErrorSummary(error) });
 }
 
 function parseUedSecret(value: unknown): UedSecret {

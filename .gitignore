@@ -16,3 +16,6 @@ playwright-report/
 test-results/
 .local/
 .browsers/
+audit_source.zip
+deep_audit_dump.txt
+project_audit_dump.txt

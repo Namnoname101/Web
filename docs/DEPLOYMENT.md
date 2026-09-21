@@ -4,6 +4,18 @@
 React, còn worker đồng bộ chạy trong cùng tiến trình ở cấu hình MVP. PostgreSQL
 là dịch vụ riêng. Container tự chạy `prisma migrate deploy` trước khi mở API.
 
+Container chạy bằng tài khoản `node`; chỉ thư mục cache/tạm được cấp quyền ghi.
+Wrapper npm giữ nguyên `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, và lệnh khởi
+động dùng `exec node` sau migration để API nhận trực tiếp tín hiệu dừng.
+Các thay đổi này chưa được xác minh bằng build/run image trên máy hiện tại vì
+chưa có Docker; production smoke Node không thay thế kiểm thử container.
+
+Frontend đã đăng nhập không được phát hành riêng bằng GitHub Pages. Session
+HttpOnly, kiểm tra `Origin` chống CSRF và callback Microsoft đều dựa trên một
+origin HTTPS duy nhất; tách Pages khỏi API sẽ tạo một bản giao diện không có
+luồng đăng nhập đáng tin cậy. Railway/Fly chạy toàn bộ container là đường phát
+hành production của dự án.
+
 ## Biến môi trường bắt buộc
 
 - `DATABASE_URL`: chuỗi kết nối PostgreSQL có TLS theo yêu cầu nhà cung cấp.
@@ -49,6 +61,10 @@ Với một replica, worker trong API là cấu hình đơn giản nhất. Nếu
 thành service riêng, đặt `WORKER_ENABLED=false` ở web/API service và dùng
 `node apps/api/dist/worker.js` cho worker. Lease trong database ngăn hai worker
 xử lý cùng một integration, nhưng một replica vẫn nên là mặc định ban đầu.
+Khi nền tảng gửi `SIGTERM`, API ngừng nhận request và worker ngừng tạo tick mới,
+cho request đang chạy tối đa 10 giây để hoàn tất, rồi đóng UED/Prisma theo thứ
+tự. Toàn bộ shutdown có deadline cứng 25 giây để một instance lỗi không treo
+quá trình thay phiên bản.
 
 ## Fly.io
 
@@ -61,14 +77,17 @@ chúng thuộc tài khoản triển khai.
 ## Kiểm tra trước và sau phát hành
 
 Trước khi đẩy image: `npm test`, `npm run test:integration`,
-`npm run typecheck`, `npm run build`. Sau phát hành, kiểm tra health/readiness,
+`npm run typecheck`, `npm run build`, rồi `npm run smoke:production`. Smoke test
+chỉ dùng database `_test` và kiểm tra cấu hình production, database, security
+headers cùng bundle React được Express phục vụ. Sau phát hành, kiểm tra health/readiness,
 đăng nhập, CRUD task/event, tạo–chấp nhận–từ chối đề xuất, worker retry, ngắt kết
 nối, responsive desktop/mobile, và cả hai ngôn ngữ. UED phải luôn chỉ đọc; dữ
 liệu ngoài chỉ tạo đề xuất. Không dùng tài khoản thật trong log, fixture hoặc
 ảnh chụp nghiệm thu công khai.
 
 Workflow `.github/workflows/ci.yml` tự tạo PostgreSQL `_test`, kiểm tra audit,
-typecheck, unit, integration và Chromium E2E trên mỗi push/pull request. Khóa mã
+typecheck, unit, integration, Chromium E2E và production smoke trên mỗi
+push/pull request. Khóa mã
 hóa trong workflow chỉ dành cho dữ liệu test tạm thời, không được dùng ở staging
 hay production.
 

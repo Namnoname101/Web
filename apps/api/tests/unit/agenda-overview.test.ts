@@ -14,4 +14,10 @@ describe('agenda local-day boundaries', () => {
     expect(bounds.localDate).toBe('2026-03-08');
     expect((+bounds.dayEnd - +bounds.dayStart) / 3_600_000).toBe(23);
   });
+
+  it('constructs the 25-hour daylight-saving transition day correctly', () => {
+    const bounds = agendaDayBounds(new Date('2026-11-01T16:00:00.000Z'), 'America/New_York');
+    expect(bounds.localDate).toBe('2026-11-01');
+    expect((+bounds.dayEnd - +bounds.dayStart) / 3_600_000).toBe(25);
+  });
 });

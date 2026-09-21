@@ -3,6 +3,7 @@ import { getPrismaClient } from '@personal-schedule/database';
 import { syncOutlook } from '../modules/integrations/outlook/outlook.service.js';
 import { syncUed } from '../modules/integrations/ued/ued.service.js';
 import { ApiError } from '../lib/errors.js';
+import { safeErrorSummary } from '../lib/safe-error.js';
 
 const LEASE_MS = 5 * 60_000;
 const AUTH_CLEANUP_INTERVAL_MS = 5 * 60_000;
@@ -10,6 +11,10 @@ const REMINDER_BATCH_SIZE = 500;
 const REMINDER_MAX_BATCHES = 10;
 let reminderLastRun = 0;
 let authCleanupLastRun = 0;
+
+/** Keep worker diagnostics useful without ever serializing an exception's
+ * message, query, response body, token, or student content into logs. */
+export const workerErrorSummary = safeErrorSummary;
 
 /** Persisted leases survive crashes; tokens prevent an old worker from
  * clearing or renewing a replacement worker's lease after expiry. */
@@ -118,7 +123,7 @@ export function startWorkerLoop(): () => Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const tick = () => {
     if (stopping) return;
-    active = workerTick().catch(() => console.error('Worker tick deferred')).finally(() => {
+    active = workerTick().catch(error => console.error('Worker tick deferred', workerErrorSummary(error))).finally(() => {
       if (!stopping) { timer = setTimeout(tick, 10_000); timer.unref(); }
     });
   };

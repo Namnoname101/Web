@@ -13,6 +13,13 @@ import { getAgendaOverview } from './modules/scheduling/agenda-overview.js';
 import { acceptEventChange, checkEventConflicts } from './modules/scheduling/event-changes.js';
 import { uedReadiness } from './modules/integrations/ued/adapter.js';
 import { proposeAfterCalendarChange } from './modules/scheduling/automatic-proposals.js';
+import {
+  getBootstrapTasks,
+  getTaskBlockPage,
+  getTaskHistoryPage,
+  MAX_TASK_BLOCK_PAGE_SIZE,
+  MAX_TASK_HISTORY_PAGE_SIZE,
+} from './modules/tasks/task-history.js';
 
 export const router = Router();
 const db = () => getPrismaClient();
@@ -54,10 +61,10 @@ router.get('/bootstrap', async (req, res) => {
   const range = horizonInput.parse({ fromDate: req.query.fromDate || now.toISOString(), toDate: req.query.toDate || new Date(+now + 7 * 86_400_000).toISOString() });
   const time = { startTime: { lt: range.toDate }, endTime: { gt: range.fromDate } };
   await db().suggestion.updateMany({ where: { userId, status: 'PENDING', expiresAt: { lte: now } }, data: { status: 'EXPIRED' } });
-  const [events, blocks, tasks, suggestions, notifications, integrations, academicRecords, agendaOverview] = await Promise.all([
+  const [events, blocks, taskResult, suggestions, notifications, integrations, academicRecords, agendaOverview] = await Promise.all([
     db().event.findMany({ where: { userId, ...time }, orderBy: { startTime: 'asc' } }),
     db().taskScheduleBlock.findMany({ where: { userId, status: { not: 'CANCELLED' }, ...time }, include: { task: true }, orderBy: { startTime: 'asc' } }),
-    db().task.findMany({ where: { userId }, include: { scheduleBlocks: { where: { status: { not: 'CANCELLED' } }, orderBy: { startTime: 'asc' } } }, orderBy: [{ priority: 'asc' }, { deadline: 'asc' }] }),
+    getBootstrapTasks(userId),
     Promise.all([
       // Never let accepted history crowd actionable UED occurrences out of the
       // bootstrap response. The separate caps keep the first application load bounded.
@@ -69,8 +76,25 @@ router.get('/bootstrap', async (req, res) => {
     db().academicRecord.findMany({ where: { userId }, orderBy: { syncedAt: 'desc' }, take: 200 }),
     getAgendaOverview(userId, req.user!.timezone, now),
   ]);
-  res.json({ user: publicUser(req.user!), events, blocks, tasks, suggestions, notifications,
-    integrations: publicIntegrations(integrations), academicRecords, agendaOverview });
+  res.json({ user: publicUser(req.user!), events, blocks, tasks: taskResult.tasks, taskHistoryPage: taskResult.page, taskStats: taskResult.stats,
+    suggestions, notifications, integrations: publicIntegrations(integrations), academicRecords, agendaOverview });
+});
+
+router.get('/tasks/history', async (req, res) => {
+  const query = z.object({
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(MAX_TASK_HISTORY_PAGE_SIZE).default(50),
+  }).strict().parse(req.query);
+  res.json(await getTaskHistoryPage(req.user!.id, query.cursor, query.limit));
+});
+
+router.get('/tasks/:id/schedule-blocks', async (req, res) => {
+  const taskId = idSchema.parse(req.params.id);
+  const query = z.object({
+    cursor: z.string().max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(MAX_TASK_BLOCK_PAGE_SIZE).default(50),
+  }).strict().parse(req.query);
+  res.json(await getTaskBlockPage(req.user!.id, taskId, query.cursor, query.limit));
 });
 
 router.post('/tasks', async (req, res) => {

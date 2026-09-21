@@ -3,6 +3,7 @@ import { assertConfig, config } from './config.js';
 import { getPrismaClient } from '@personal-schedule/database';
 import { startWorkerLoop } from './jobs/worker-loop.js';
 import { shutdownUed } from './modules/integrations/ued/browser.js';
+import { createHttpDrainStep, createShutdownCoordinator } from './lib/graceful-shutdown.js';
 
 assertConfig();
 const port = config.port;
@@ -12,18 +13,18 @@ const server = app.listen(port, () => {
   console.info(`API listening on http://localhost:${port}`);
 });
 
-function shutdown(signal: string): void {
-  console.info(`${signal} received; stopping API server.`);
-  server.close(async (error) => {
-    await stopWorker();
-    await shutdownUed();
-    await getPrismaClient().$disconnect();
-    if (error) {
-      console.error(error);
-      process.exitCode = 1;
-    }
-  });
-}
+const shutdown = createShutdownCoordinator({
+  label: 'API server',
+  phases: [
+    [
+      { name: 'http', run: createHttpDrainStep(server) },
+      { name: 'worker', run: stopWorker },
+    ],
+    [{ name: 'ued-browser', run: shutdownUed }],
+    [{ name: 'database', run: () => getPrismaClient().$disconnect() }],
+  ],
+  onHardTimeout: () => server.closeAllConnections(),
+});
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => { void shutdown('SIGINT'); });
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });

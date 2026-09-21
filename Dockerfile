@@ -22,6 +22,8 @@ COPY scripts ./scripts
 # DATABASE_URL replaces it when the container starts.
 RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build npm run build
 RUN npx playwright install --with-deps chromium && npm cache clean --force
+# The npm wrapper uses project-local scratch space, including during migrations.
+RUN mkdir -p /app/.tmp /app/.npm-cache && chown -R node:node /app/.tmp /app/.npm-cache
 
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -37,4 +39,4 @@ USER node
 
 # Migrations are idempotent. Express serves apps/web/dist after the build, so
 # the deployed service has one public port and one origin.
-CMD ["sh", "-c", "npm run db:deploy && node apps/api/dist/server.js"]
+CMD ["sh", "-c", "npm run db:deploy && exec node apps/api/dist/server.js"]

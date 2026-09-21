@@ -29,26 +29,43 @@ notifications, safe integration status/cursors, and academic records. The range
 defaults to seven days and cannot exceed 90 days.
 
 The same response includes `agendaOverview`, calculated independently from that
-calendar range. Its `today` collection covers the exact local calendar day in
-the student's configured IANA timezone; `upcoming` contains the next 12
-scheduled items without an arbitrary date horizon, and `past` contains the 12
-most recently ended items. Events and task blocks are returned separately in
-each collection, cancelled items are excluded, and `asOf`, `dayStart`, and
-`dayEnd` make the half-open time boundaries explicit.
+calendar range. Its `today` collection covers every non-cancelled item that
+overlaps the exact local calendar day in the student's configured IANA
+timezone, including items that already ended earlier that day. `upcoming`
+contains the next 12 scheduled items without an arbitrary date horizon, and
+`past` contains the 12 most recently ended items. Events and task blocks are
+returned separately in each collection; `asOf`, `dayStart`, and `dayEnd` make
+the half-open time boundaries explicit.
+
+Bootstrap `tasks` contains every active task plus the first 50 closed tasks
+(`COMPLETED`/`CANCELLED`), without nested `scheduleBlocks`. `taskHistoryPage`
+contains `{hasMore,nextCursor}` for closed history. `taskStats` contains
+authoritative `{active,completed,cancelled}` counts, independent of loaded pages.
 
 ## Tasks and accepted schedule blocks
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/tasks/history?cursor=<opaque>&limit=50` | Page through closed tasks by updated time and ID, newest first. |
+| GET | `/tasks/:id/schedule-blocks?cursor=<opaque>&limit=50` | Page through a task's non-cancelled sessions by start time and ID, newest first. |
 | POST | `/tasks` | Create a pending task. |
 | PATCH | `/tasks/:id` | Edit a pending task; scheduling fields require unscheduling first. |
 | PATCH | `/tasks/:id/status` | Move among `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. |
-| POST | `/tasks/:id/unschedule` | Cancel only future blocks and return the task to pending. |
+| POST | `/tasks/:id/unschedule` | Cancel only future blocks without changing the task's current progress status. |
 
 Task input: `title`, optional `notes`/`location`, `durationMinutes` (15–43200),
 future `deadline`, `priority` (`HIGH|MEDIUM|LOW`), and `isSplittable`. Schedule
 blocks are not directly writable; they are created atomically only when a
 student accepts a valid task-plan suggestion.
+
+Both pagination endpoints accept limits 1–100, default 50. History returns
+`{tasks,page:{hasMore,nextCursor}}`; sessions return
+`{blocks,hasFutureBlocks,page:{hasMore,nextCursor}}`. `hasFutureBlocks` checks
+all scheduled sessions after server time, not just the current page. Opaque
+session cursors are task-scoped. Invalid query values return 400; another
+student's or a missing task returns 404. Continue with the returned cursor;
+these are live pages rather than an immutable snapshot. The UI retains loaded
+history across refreshes and explains that history search covers loaded rows.
 
 ## Events
 
@@ -99,11 +116,12 @@ and `notificationsEnabled`. The break must lie wholly inside active hours.
 
 The password is forwarded only for the current UED login attempt and is never
 stored. A verified Playwright storage state is AES-256-GCM encrypted at rest.
-Sync reads portal data and imports each newly discovered, non-cancelled class
-occurrence directly as a fixed `SCHOOL_PORTAL` calendar Event. A later room,
-time, status, or cancellation change remains an evidence-backed suggestion for
-the student to approve. The integration never writes registration, grades,
-payments, attendance, or timetable state to UED.
+Sync reads portal data. The first verified timetable snapshot for each term is
+imported as fixed `SCHOOL_PORTAL` calendar Events; an occurrence discovered for
+the first time only on a later snapshot, or a later room, time, status, or
+cancellation change, remains an evidence-backed suggestion for the student to
+approve. The integration never writes registration, grades, payments,
+attendance, or timetable state to UED.
 
 ## Outlook integration
 
@@ -116,7 +134,8 @@ payments, attendance, or timetable state to UED.
 Only `User.Read`, `Mail.Read`, and `offline_access` are requested. Refresh
 tokens are encrypted per student. The worker reads `/me/messages` across the
 mailbox with pagination and creates conservative Vietnamese/English change
-suggestions.
+suggestions. Graph continuation cursors and token state are server-only and are
+never returned by the public integration endpoints.
 
 ## Integration operations
 

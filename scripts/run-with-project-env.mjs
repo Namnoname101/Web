@@ -31,7 +31,7 @@ const child = spawn(process.execPath, [npmCli, 'run', scriptName], {
     TEMP: projectTemp,
     TMP: projectTemp,
     TMPDIR: projectTemp,
-    PLAYWRIGHT_BROWSERS_PATH: path.join(projectRoot, '.browsers'),
+    PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(projectRoot, '.browsers'),
     npm_config_cache: projectCache,
   },
   stdio: 'inherit',

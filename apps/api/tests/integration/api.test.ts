@@ -22,7 +22,10 @@ describe.skipIf(!enabled)('API with real PostgreSQL', () => {
   afterAll(async()=>{ await new Promise<void>((r,e)=>server.close(x=>x?e(x):r())); await getPrismaClient().$disconnect(); });
   it('requires login, hides secrets and rejects foreign origins',async()=>{
     expect((await request('/auth/me','GET',undefined,'')).status).toBe(401);
-    const me=await (await request('/auth/me')).json(); expect(me.user).not.toHaveProperty('passwordHash');
+    const meResponse=await request('/auth/me');
+    expect(meResponse.headers.get('cache-control')).toContain('no-store');
+    const me=await meResponse.json(); expect(me.user).not.toHaveProperty('passwordHash');
+    expect((await request('/bootstrap')).headers.get('cache-control')).toContain('no-store');
     expect((await request('/tasks','POST',{},cookieA,'https://untrusted.example')).status).toBe(403);
   });
   it('keeps provider sync cursors private while exposing safe UED term controls',async()=>{
@@ -159,6 +162,12 @@ describe.skipIf(!enabled)('API with real PostgreSQL', () => {
     const keys=tasks.map(task=>`deadline:${task.id}:${deadline.toISOString()}`);
     expect(await prisma.notification.count({where:{userId:userAId,dedupeKey:{in:keys}}})).toBe(501);
     expect(await createDeadlineReminders()).toBe(0);
+    const state=await (await request('/bootstrap')).json();
+    expect(state.tasks.filter((task:{title:string})=>task.title.startsWith(marker))).toHaveLength(501);
+    expect(state.taskHistoryPage).not.toHaveProperty('activeTruncated');
+    const additional=await request('/tasks','POST',{title:'Active work remains uncapped',durationMinutes:30,deadline,priority:'LOW'});
+    expect(additional.status).toBe(201);
+    await prisma.task.delete({where:{id:(await additional.json()).id}});
   });
   it('does not permit accepting another student proposal',async()=>{
     expect((await request(`/suggestions/${proposalId}/accept`,'POST',{},cookieB)).status).toBe(404);
@@ -200,6 +209,95 @@ describe.skipIf(!enabled)('API with real PostgreSQL', () => {
     expect((await request(`/suggestions/${rejected.suggestion.id}/reject`,'POST',{})).status).toBe(200);
     expect(await prisma.event.findFirst({where:{userId:userAId,externalId:rejected.externalId}})).toBeNull();
     expect(await prisma.suggestion.findUnique({where:{id:rejected.suggestion.id}})).toMatchObject({status:'REJECTED'});
+  });
+  it('paginates closed task history without duplicates or silent loss',async()=>{
+    const prisma=getPrismaClient();
+    const marker=`History page ${randomUUID()}`;
+    const instant=Date.now();
+    await prisma.task.createMany({data:Array.from({length:55},(_,index)=>({
+      userId:userBId,title:`${marker} ${index}`,durationMinutes:30,
+      deadline:new Date(instant+86_400_000),priority:'LOW' as const,status:'COMPLETED' as const,
+      completedAt:new Date(instant-index*1_000),createdAt:new Date(instant-index*1_000),updatedAt:new Date(instant-index*1_000),
+    }))});
+    try {
+      const initial=await (await request('/bootstrap','GET',undefined,cookieB)).json();
+      const first=initial.tasks.filter((task:{title:string})=>task.title.startsWith(marker));
+      expect(first.length).toBeGreaterThan(0);
+      expect(initial.taskHistoryPage).toEqual(expect.objectContaining({hasMore:true,nextCursor:expect.any(String)}));
+      expect(initial.taskHistoryPage).not.toHaveProperty('activeTruncated');
+      expect(initial.tasks.every((task:Record<string,unknown>)=>!('scheduleBlocks' in task))).toBe(true);
+      const counts=await prisma.task.groupBy({by:['status'],where:{userId:userBId},_count:{_all:true}});
+      const count=(status:string)=>counts.find(row=>row.status===status)?._count._all||0;
+      expect(initial.taskStats).toEqual({
+        active:count('PENDING')+count('IN_PROGRESS'),completed:count('COMPLETED'),cancelled:count('CANCELLED'),
+      });
+
+      const collected=[...first];
+      let cursor:string|null=initial.taskHistoryPage.nextCursor;
+      const firstCursor=cursor;
+      for (let page=0; cursor && page<10 && collected.length<55; page++) {
+        const nextResponse=await request(`/tasks/history?cursor=${encodeURIComponent(cursor)}`,'GET',undefined,cookieB);
+        expect(nextResponse.status).toBe(200);
+        const next=await nextResponse.json();
+        collected.push(...next.tasks.filter((task:{title:string})=>task.title.startsWith(marker)));
+        cursor=next.page.nextCursor;
+      }
+      const ids=collected.map((task:{id:string})=>task.id);
+      expect(ids).toHaveLength(55);
+      expect(new Set(ids).size).toBe(55);
+      expect((await request('/tasks/history?cursor=not-valid','GET',undefined,cookieB)).status).toBe(400);
+      expect((await request('/tasks/history?limit=101','GET',undefined,cookieB)).status).toBe(400);
+      const isolated=await (await request(`/tasks/history?cursor=${encodeURIComponent(firstCursor!)}`,'GET',undefined,cookieA)).json();
+      expect(isolated.tasks.some((task:{title:string})=>task.title.startsWith(marker))).toBe(false);
+    } finally {
+      await prisma.task.deleteMany({where:{userId:userBId,title:{startsWith:marker}}});
+    }
+  });
+  it('paginates every saved task session with task and user isolation',async()=>{
+    const prisma=getPrismaClient();
+    const marker=`Block page ${randomUUID()}`;
+    const now=Date.now();
+    const task=await prisma.task.create({data:{userId:userBId,title:marker,durationMinutes:30,
+      deadline:new Date(now+3*86_400_000),priority:'MEDIUM',status:'IN_PROGRESS',isScheduled:true}});
+    const another=await prisma.task.create({data:{userId:userBId,title:`${marker} other`,durationMinutes:30,
+      deadline:new Date(now+3*86_400_000),priority:'MEDIUM'}});
+    await prisma.taskScheduleBlock.createMany({data:Array.from({length:107},(_,index)=>{
+      const future=index===0;
+      const startTime=new Date(future?now+86_400_000:now-(index+1)*3_600_000);
+      return {userId:userBId,taskId:task.id,startTime,endTime:new Date(+startTime+30*60_000),
+        status:(index>=105?'CANCELLED':future?'SCHEDULED':'COMPLETED') as 'CANCELLED'|'SCHEDULED'|'COMPLETED',origin:'AUTO' as const};
+    })});
+    try {
+      const blocks: {id:string;status:string}[]=[];
+      let cursor:string|null=null;
+      let firstCursor:string|null=null;
+      for (let page=0;page<10;page++) {
+        const response=await request(`/tasks/${task.id}/schedule-blocks?limit=17${cursor?`&cursor=${encodeURIComponent(cursor)}`:''}`,'GET',undefined,cookieB);
+        expect(response.status).toBe(200);
+        const body=await response.json();
+        expect(body.hasFutureBlocks).toBe(true);
+        expect(body.blocks.length).toBeLessThanOrEqual(17);
+        blocks.push(...body.blocks);
+        cursor=body.page.nextCursor;
+        firstCursor??=cursor;
+        if (!body.page.hasMore) { expect(cursor).toBeNull(); break; }
+      }
+      expect(blocks).toHaveLength(105);
+      expect(new Set(blocks.map(block=>block.id)).size).toBe(105);
+      expect(blocks.some(block=>block.status==='CANCELLED')).toBe(false);
+
+      const foreign=await request(`/tasks/${task.id}/schedule-blocks`,'GET',undefined,cookieA);
+      expect(foreign.status).toBe(404);
+      expect((await foreign.json()).error.code).toBe('NOT_FOUND');
+      const crossTask=await request(`/tasks/${another.id}/schedule-blocks?cursor=${encodeURIComponent(firstCursor!)}`,'GET',undefined,cookieB);
+      expect(crossTask.status).toBe(400);
+      expect((await crossTask.json()).error.code).toBe('INVALID_TASK_BLOCK_CURSOR');
+      expect((await request(`/tasks/${task.id}/schedule-blocks?cursor=invalid`,'GET',undefined,cookieB)).status).toBe(400);
+      expect((await request(`/tasks/${task.id}/schedule-blocks?limit=101`,'GET',undefined,cookieB)).status).toBe(400);
+      expect((await request(`/tasks/${task.id}/schedule-blocks?extra=true`,'GET',undefined,cookieB)).status).toBe(400);
+    } finally {
+      await prisma.task.deleteMany({where:{id:{in:[task.id,another.id]},userId:userBId}});
+    }
   });
   it('logs out and revokes the server-side session',async()=>{
     expect((await request('/auth/logout','POST',{})).status).toBe(200);

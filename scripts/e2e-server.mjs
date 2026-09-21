@@ -42,17 +42,43 @@ assertConfig();
 // Cascades remove only demo fixtures from earlier browser runs.
 await getPrismaClient().user.deleteMany({ where: { isDemo: true } });
 
+// Playwright normally force-kills its web server. That can be denied in a
+// restricted Windows runner, so global teardown requests a cooperative exit.
+// This route exists only in this isolated test process, never in the real API.
+app.post('/__e2e__/shutdown', (_request, response) => {
+  response.status(202).end();
+  response.once('finish', () => setImmediate(shutdownAndExit));
+});
+
 const server = app.listen(3100, '127.0.0.1', () => {
   console.info('Isolated E2E server listening on http://127.0.0.1:3100');
 });
 
-let closing = false;
+let closing;
 async function close() {
-  if (closing) return;
-  closing = true;
-  await new Promise(resolve => server.close(resolve));
-  await shutdownUed();
-  await getPrismaClient().$disconnect();
+  if (closing) return closing;
+  closing = (async () => {
+    const serverClosed = new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+      // Browser contexts can leave idle keep-alive sockets behind briefly.
+      // They carry no state and must not make a completed E2E suite hang.
+      server.closeAllConnections();
+    });
+    await Promise.all([serverClosed, shutdownUed()]);
+    await getPrismaClient().$disconnect();
+  })();
+  return closing;
 }
-process.once('SIGINT', () => void close());
-process.once('SIGTERM', () => void close());
+
+function shutdownAndExit() {
+  const deadline = setTimeout(() => {
+    console.error('E2E server shutdown timed out.');
+    process.exit(1);
+  }, 10_000);
+  void close().then(
+    () => { clearTimeout(deadline); process.exit(0); },
+    error => { clearTimeout(deadline); console.error('E2E server shutdown failed.', error); process.exit(1); },
+  );
+}
+process.once('SIGINT', shutdownAndExit);
+process.once('SIGTERM', shutdownAndExit);

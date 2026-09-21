@@ -16,7 +16,7 @@ vi.mock('@personal-schedule/database', () => ({
 vi.mock('../../src/modules/integrations/outlook/outlook.service.js', () => ({ syncOutlook: vi.fn() }));
 vi.mock('../../src/modules/integrations/ued/ued.service.js', () => ({ syncUed: vi.fn() }));
 
-import { cleanupExpiredAuthentication, createDeadlineReminders } from '../../src/jobs/worker-loop.js';
+import { cleanupExpiredAuthentication, createDeadlineReminders, workerErrorSummary } from '../../src/jobs/worker-loop.js';
 
 describe('worker maintenance', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -42,5 +42,13 @@ describe('worker maintenance', () => {
 
     expect(fixture.deleteSessions).toHaveBeenCalledWith({ where: { expiresAt: { lte: cutoff } } });
     expect(fixture.deleteAttempts).toHaveBeenCalledWith({ where: { expiresAt: { lte: cutoff } } });
+  });
+
+  it('logs only a bounded diagnostic code and never an exception message', () => {
+    const error = Object.assign(new Error('query and student data must stay private'), { code: 'P2010' });
+    expect(workerErrorSummary(error)).toEqual({ name: 'Error', code: 'P2010' });
+    expect(JSON.stringify(workerErrorSummary(error))).not.toContain('student data');
+    expect(workerErrorSummary({ code: 'unsafe code with spaces', token: 'secret' }))
+      .toEqual({ name: 'object', code: 'UNEXPECTED_ERROR' });
   });
 });
