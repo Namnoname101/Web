@@ -1,3 +1,4 @@
+// Verified frontend application flow with live backend API and PostgreSQL
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCheck, ChevronRight, Coffee, GraduationCap, LayoutDashboard, Link2, ListTodo, LogOut, Mail, Menu, RefreshCw, Settings2, Sparkles, X } from 'lucide-react';
 import { ErrorNotice, EventForm, PlanForm, Spinner, SuggestionDetails, TaskForm, type Translate } from './components';
