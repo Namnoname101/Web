@@ -3,7 +3,8 @@ import { hash, token } from '../../../lib/crypto.js';
 import { ApiError } from '../../../lib/errors.js';
 import { AdmissionGate } from '../../../lib/admission-gate.js';
 import { UED_LOGIN_PATH, UED_ORIGIN, trustedUedUrl, type UedAdapter, type UedRecord, mapUedRows,
-  type UedTerm, type UedTermChoices, type UedTermOption, type UedWeekRange, mapUedWeekRanges, mapUedCurrentTerm } from './adapter.js';
+  type UedTerm, type UedTermChoices, type UedTermOption, type UedWeekRange, mapUedWeekRanges, mapUedCurrentTerm,
+  extractUedMatrixRow } from './adapter.js';
 
 export type UedStorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 export const UED_CHALLENGE_TTL_MS = 5 * 60_000;
@@ -46,7 +47,10 @@ async function closeBrowserContext(context: BrowserContext): Promise<void> {
 }
 
 async function browser(): Promise<Browser> {
-  browserPromise ??= chromium.launch({ headless: true }).then(instance => {
+  browserPromise ??= chromium.launch({
+    headless: true,
+    args: process.platform === 'linux' ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] : [],
+  }).then(instance => {
     instance.on('disconnected', () => { browserPromise = undefined; });
     return instance;
   }).catch(() => {
@@ -122,7 +126,7 @@ async function openPortal(adapter: UedAdapter, storageState?: UedStorageState): 
     context.setDefaultTimeout(12_000);
     context.setDefaultNavigationTimeout(25_000);
     const page = await context.newPage();
-    const paths = ['/', UED_LOGIN_PATH, ...[adapter.auth.identityPath, ...adapter.auth.landingPaths,
+    const paths = ['/', '/index.php', UED_LOGIN_PATH, ...[adapter.auth.identityPath, ...adapter.auth.landingPaths,
       ...adapter.pages.flatMap(mapping => mapping.termFilter ? [mapping.path, '/sinhvien/thoikhoabieu/index', ...(mapping.entry ? [mapping.entry.path] : [])] : [mapping.path, ...(mapping.entry ? [mapping.entry.path] : [])])].map(path => {
       const url = new URL(trustedUedUrl(path)); return `${url.pathname}${url.search}`;
     })];
@@ -400,17 +404,35 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
       const count = await rows.count();
       if (count > 5000) throw new ApiError(502, 'UED_PAGE_TOO_LARGE');
       const raw: Record<string, string>[] = [];
-      for (let index = 0; index < count; index++) {
-        const row = rows.nth(index);
-        const fields: Record<string, string> = {};
-        for (const [key, field] of Object.entries(mapping.fields)) {
-          const element = row.locator(field.selector);
-          if (await element.count() !== 1) throw new ApiError(502, 'UED_FIELD_MAPPING_FAILED');
-          const value = field.attribute ? await element.getAttribute(field.attribute) : await element.innerText();
-          if ((value?.length || 0) > 10_000) throw new ApiError(502, 'UED_FIELD_TOO_LARGE');
-          fields[key] = value || '';
+      if (mapping.termFilter === 'UED_TIMETABLE') {
+        const matrixRows = await rows.evaluateAll(trs => trs.map(tr => {
+          const cells = Array.from(tr.children).map(c => (c.textContent || '').trim());
+          return cells.length >= 24 ? cells : null;
+        }));
+        if (matrixRows.length > 0 && matrixRows.every(r => r !== null)) {
+          for (const cells of matrixRows as string[][]) {
+            raw.push(extractUedMatrixRow(cells));
+          }
         }
-        raw.push(fields);
+      }
+      if (raw.length === 0 && count > 0) {
+        for (let index = 0; index < count; index++) {
+          const row = rows.nth(index);
+          const fields: Record<string, string> = {};
+          for (const [key, field] of Object.entries(mapping.fields)) {
+            const element = row.locator(field.selector);
+            if (await element.count() !== 1) throw new ApiError(502, 'UED_FIELD_MAPPING_FAILED');
+            const value = field.attribute ? await element.getAttribute(field.attribute) : await element.innerText();
+            if ((value?.length || 0) > 10_000) throw new ApiError(502, 'UED_FIELD_TOO_LARGE');
+            fields[key] = value || '';
+          }
+          raw.push(fields);
+        }
+      }
+      for (const fields of raw) {
+        for (const value of Object.values(fields)) {
+          if ((value?.length || 0) > 10_000) throw new ApiError(502, 'UED_FIELD_TOO_LARGE');
+        }
       }
       records.push(...mapUedRows(raw, mapping, adapter.timezone, mapping.termFilter ? termChoices?.selected : undefined));
       if (mapping.termFilter) {

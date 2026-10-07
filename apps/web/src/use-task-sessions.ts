@@ -9,6 +9,8 @@ export function useTaskSessions(task: Task, locale: Locale) {
   const [error, setError] = useState('');
   const generation = useRef(0);
   const inFlight = useRef(false);
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const load = useCallback(async (cursor?: string) => {
     if (inFlight.current) return;
     const request = ++generation.current;
@@ -22,11 +24,11 @@ export function useTaskSessions(task: Task, locale: Locale) {
         blocks: [...new Map([...previous.blocks, ...response.blocks].map(block => [block.id, block])).values()],
       } : response);
     } catch (err) {
-      if (request === generation.current) setError(errorMessage(err, locale));
+      if (request === generation.current) setError(errorMessage(err, localeRef.current));
     } finally {
       if (request === generation.current) { inFlight.current = false; setLoading(false); }
     }
-  }, [task.id, locale]);
+  }, [task.id]);
   useEffect(() => {
     setResult(null); void load();
     return () => { generation.current++; inFlight.current = false; };

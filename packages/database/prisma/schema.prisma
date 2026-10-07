@@ -142,6 +142,7 @@ model Task {
   @@index([userId, priority, deadline], map: "ix_tasks_scheduling_queue")
   @@index([userId, deadline], map: "ix_tasks_user_deadline")
   @@index([userId, status, updatedAt, id], map: "ix_tasks_user_status_history")
+  @@index([status, deadline], map: "ix_tasks_status_deadline")
   @@map("tasks")
 }
 
@@ -246,6 +247,7 @@ model Notification {
 
   @@unique([userId, dedupeKey])
   @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt(sort: Desc)], map: "ix_notifications_user_created")
   @@map("notifications")
 }
 
@@ -282,5 +284,6 @@ model AcademicRecord {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, category, externalId])
+  @@index([userId, syncedAt(sort: Desc)], map: "ix_academic_records_user_synced")
   @@map("academic_records")
 }

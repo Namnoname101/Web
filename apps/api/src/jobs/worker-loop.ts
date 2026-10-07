@@ -54,7 +54,9 @@ export async function workerTick(): Promise<void> {
     await createDeadlineReminders(); reminderLastRun = Date.now();
   }
   if (Date.now() - authCleanupLastRun > AUTH_CLEANUP_INTERVAL_MS) {
-    await cleanupExpiredAuthentication(); authCleanupLastRun = Date.now();
+    await cleanupExpiredAuthentication();
+    await cleanupExpiredSuggestions();
+    authCleanupLastRun = Date.now();
   }
 }
 
@@ -115,6 +117,13 @@ export async function cleanupExpiredAuthentication(now = new Date()): Promise<{ 
     db.oAuthAttempt.deleteMany({ where: { expiresAt: { lte: now } } }),
   ]);
   return { sessions: sessions.count, oauthAttempts: oauthAttempts.count };
+}
+
+/** Mark expired suggestions as EXPIRED in the background so GET /bootstrap doesn't have to write. */
+export async function cleanupExpiredSuggestions(now = new Date()): Promise<number> {
+  const db = getPrismaClient();
+  const result = await db.suggestion.updateMany({ where: { status: 'PENDING', expiresAt: { lte: now } }, data: { status: 'EXPIRED' } });
+  return result.count;
 }
 
 export function startWorkerLoop(): () => Promise<void> {

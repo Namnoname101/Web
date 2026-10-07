@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getUedAdapter, mapUedCurrentTerm, mapUedRows, mapUedWeekRanges, trustedUedUrl, uedAdapterSchema } from '../../src/modules/integrations/ued/adapter.js';
+import { extractUedMatrixRow, getUedAdapter, mapUedCurrentTerm, mapUedRows, mapUedWeekRanges, trustedUedUrl, uedAdapterSchema } from '../../src/modules/integrations/ued/adapter.js';
 import { allowedPortalRequest, isPageEntryBody, isTimetableFilterBody } from '../../src/modules/integrations/ued/browser.js';
 
 const adapter = uedAdapterSchema.parse({
@@ -146,3 +146,50 @@ describe('validated academic and schedule row mapping', () => {
     expect(mapUedRows([{ ...sample, start: '2026-09-14T07:00:00+07:00', end: '2026-09-14T09:00:00+07:00' }], isoPage, adapter.timezone)[0].schedule?.startTime).toBe('2026-09-14T00:00:00.000Z');
   });
 });
+
+describe('UED timetable matrix row parser', () => {
+  it('correctly maps 42-column timetable row into periods and week masks', () => {
+    const cells = [
+      '2', '31221010', '24-0101', '54', 'An toàn thông tin', 'Sáng',
+      'x', 'x', '', '', '', '', '', '', '', '', '', '', '', '', '',
+      'Đoàn Duy Bình', 'B3-206',
+      'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '', 'x', 'x', 'x', 'x', '', '', '', ''
+    ];
+    const row = extractUedMatrixRow(cells);
+    expect(row).toEqual({
+      weekday: '2',
+      courseCode: '31221010',
+      group: '24-0101',
+      capacity: '54',
+      title: 'An toàn thông tin',
+      session: 'Sáng',
+      periods: '12-------------',
+      teacher: 'Đoàn Duy Bình',
+      location: 'B3-206',
+      weeks: '1234567890-2345----',
+    });
+  });
+
+  it('correctly maps afternoon periods (e.g. 7, 8, 9) and single-week classes', () => {
+    const cells = [
+      '5', '31231016', '24-0102', '53', 'Công nghệ phần mềm', 'Chiều',
+      '', '', '', '', '', '', 'x', 'x', 'x', '', '', '', '', '', '',
+      'Vũ Thị Trà', 'B3-503',
+      'x', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+    ];
+    const row = extractUedMatrixRow(cells);
+    expect(row).toEqual({
+      weekday: '5',
+      courseCode: '31231016',
+      group: '24-0102',
+      capacity: '53',
+      title: 'Công nghệ phần mềm',
+      session: 'Chiều',
+      periods: '------789------',
+      teacher: 'Vũ Thị Trà',
+      location: 'B3-503',
+      weeks: '1------------------',
+    });
+  });
+});
+

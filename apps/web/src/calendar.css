@@ -1,0 +1,961 @@
+/* Google Calendar-inspired Split-View Calendar Styles */
+
+.cal-gg-workspace {
+  color: var(--app-ink, #1e293b);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cal-split-layout {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* ==========================================================================
+   LEFT SIDEBAR
+   ========================================================================== */
+
+.cal-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Create Button Pill */
+.cal-create-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  width: fit-content;
+}
+
+.cal-create-pill:hover {
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.cal-create-icon {
+  color: #2563eb;
+}
+
+/* Mini Calendar */
+.cal-mini-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-mini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.cal-mini-header h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: capitalize;
+  margin: 0;
+}
+
+.cal-mini-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-mini-arrow {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cal-mini-arrow:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.cal-mini-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  padding: 4px 0;
+}
+
+.cal-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-mini-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.cal-mini-cell:hover {
+  background: #f1f5f9;
+}
+
+.cal-mini-cell.is-other-month {
+  color: #cbd5e1;
+}
+
+.cal-mini-cell.is-today {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.cal-mini-cell.is-selected {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.cal-mini-dot {
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: #2563eb;
+}
+
+.cal-mini-cell.is-selected .cal-mini-dot {
+  background: #ffffff;
+}
+
+/* Filters Section */
+.cal-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin: 0 0 10px;
+}
+
+.cal-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cal-filter-item input {
+  cursor: pointer;
+}
+
+.cal-filter-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cal-indicator-ued { background: #2563eb; }
+.cal-indicator-study { background: #059669; }
+.cal-indicator-personal { background: #d97706; }
+.cal-indicator-deadline { background: #dc2626; }
+
+/* Deadlines list */
+.cal-deadlines-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-deadlines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cal-deadline-card {
+  text-align: left;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-left: 3px solid #ef4444;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cal-deadline-card:hover {
+  background: #fee2e2;
+}
+
+.cal-deadline-info strong {
+  display: block;
+  font-size: 12px;
+  color: #991b1b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-deadline-info small {
+  font-size: 11px;
+  color: #dc2626;
+}
+
+.cal-sidebar-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #64748b;
+  margin-top: auto;
+}
+
+.cal-sidebar-info svg {
+  color: #059669;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   RIGHT MAIN CALENDAR BOARD
+   ========================================================================== */
+
+.cal-main-board {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  min-height: 700px;
+}
+
+/* Main Toolbar */
+.cal-main-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  flex-wrap: wrap;
+}
+
+.cal-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cal-nav-arrows {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-title-range {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.cal-view-modes {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.cal-mode-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cal-mode-btn:hover {
+  color: #1e293b;
+}
+
+.cal-mode-btn.is-active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Loading & Error Banners */
+.cal-load-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.cal-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  border-bottom: 1px solid #fee2e2;
+}
+
+/* ==========================================================================
+   TIME-GRID VIEWPORT
+   ========================================================================== */
+
+.cal-grid-viewport {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  position: relative;
+  max-height: 820px;
+}
+
+/* Day Headers Row */
+.cal-grid-header-row {
+  display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  min-width: 800px;
+}
+
+.cal-timezone-corner {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid #e2e8f0;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.cal-header-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 6px;
+  border: none;
+  background: transparent;
+  border-right: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cal-header-cell:hover {
+  background: #f8fafc;
+}
+
+.cal-header-weekday {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.cal-header-daynum {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.cal-header-cell.is-today .cal-header-weekday {
+  color: #2563eb;
+}
+
+.cal-header-cell.is-today .cal-header-daynum {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.cal-header-cell.is-selected:not(.is-today) .cal-header-daynum {
+  background: #e2e8f0;
+}
+
+/* All-Day / Deadlines Row */
+.cal-allday-row {
+  display: grid;
+  min-width: 800px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafaf9;
+  min-height: 36px;
+}
+
+.cal-allday-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #e2e8f0;
+  font-size: 10px;
+  color: #78716c;
+  font-weight: 600;
+  padding: 4px;
+}
+
+.cal-allday-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+  border-right: 1px solid #f1f5f9;
+  overflow: hidden;
+}
+
+.cal-allday-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.15s ease;
+}
+
+.cal-allday-chip.cal-kind-deadline {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.cal-allday-chip.cal-kind-deadline.is-completed {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.cal-allday-chip.cal-kind-deadline.is-overdue {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.cal-allday-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.cal-allday-time {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   HOURLY GRID CANVAS
+   ========================================================================== */
+
+.cal-grid-body {
+  display: grid;
+  min-width: 800px;
+  position: relative;
+  /* 16 hours * 56px = 896px total height */
+  height: 896px;
+}
+
+/* Time Gutter Column */
+.cal-time-gutter {
+  border-right: 1px solid #e2e8f0;
+  position: relative;
+  user-select: none;
+}
+
+.cal-gutter-hour {
+  height: 56px;
+  position: relative;
+}
+
+.cal-gutter-hour span {
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.cal-gutter-hour:first-child span {
+  top: 4px;
+}
+
+/* Day Columns */
+.cal-grid-day-col {
+  position: relative;
+  border-right: 1px solid #f1f5f9;
+  height: 100%;
+}
+
+.cal-grid-day-col.is-today-col {
+  background: rgba(239, 246, 255, 0.25);
+}
+
+.cal-hour-slot {
+  height: 56px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #f1f5f9;
+  position: relative;
+}
+
+.cal-hour-slot:after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  border-bottom: 1px dashed #f8fafc;
+}
+
+/* Current Time Red Indicator */
+.cal-now-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.cal-now-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ea4335;
+  margin-left: -4px;
+}
+
+.cal-now-line {
+  flex: 1;
+  height: 2px;
+  background: #ea4335;
+}
+
+/* ==========================================================================
+   EVENT CHIP CARD (Google Calendar Style)
+   ========================================================================== */
+
+.cal-grid-chip {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.cal-grid-chip:hover {
+  z-index: 8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: scale(1.015);
+}
+
+/* Kinds Color Themes */
+/* 1. UED Classes (University Blue) */
+.cal-grid-chip.cal-kind-ued {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #2563eb;
+  color: #1e3a8a;
+}
+.cal-grid-chip.cal-kind-ued:hover {
+  border-color: #2563eb;
+}
+
+/* 2. Study Sessions (Emerald Green) */
+.cal-grid-chip.cal-kind-study {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-left: 4px solid #059669;
+  color: #064e3b;
+}
+.cal-grid-chip.cal-kind-study:hover {
+  border-color: #059669;
+}
+
+/* 3. Personal Events (Amber Gold) */
+.cal-grid-chip.cal-kind-personal {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #d97706;
+  color: #78350f;
+}
+.cal-grid-chip.cal-kind-personal:hover {
+  border-color: #d97706;
+}
+
+/* 4. Legacy (Slate Gray) */
+.cal-grid-chip.cal-kind-legacy {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #64748b;
+  color: #334155;
+}
+
+/* Chip Content Layout */
+.cal-chip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.cal-chip-time {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.cal-chip-period {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  border-radius: 4px;
+}
+
+.cal-kind-study .cal-chip-period {
+  background: rgba(5, 150, 105, 0.12);
+  color: #047857;
+}
+
+.cal-chip-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.cal-chip-title strong {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cal-chip-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.cal-chip-location {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: auto;
+}
+
+.cal-chip-live-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: #ea4335;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.cal-grid-chip.is-past {
+  opacity: 0.7;
+}
+
+.cal-grid-chip.is-current {
+  box-shadow: 0 0 0 2px #2563eb;
+}
+
+/* ==========================================================================
+   AGENDA VIEW
+   ========================================================================== */
+
+.cal-agenda-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px;
+  max-height: 820px;
+  overflow-y: auto;
+}
+
+.cal-agenda-day-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cal-agenda-day-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.cal-agenda-day-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.cal-today-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #2563eb;
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.cal-agenda-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 4px 0;
+}
+
+.cal-agenda-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-agenda-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cal-agenda-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateX(2px);
+}
+
+.cal-agenda-card.cal-kind-ued { border-left: 4px solid #2563eb; }
+.cal-agenda-card.cal-kind-study { border-left: 4px solid #059669; }
+.cal-agenda-card.cal-kind-personal { border-left: 4px solid #d97706; }
+.cal-agenda-card.cal-kind-deadline { border-left: 4px solid #dc2626; }
+
+.cal-agenda-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  min-width: 110px;
+}
+
+.cal-agenda-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cal-agenda-content strong {
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.cal-agenda-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cal-agenda-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* ==========================================================================
+   CANCELLED EVENTS & MISC
+   ========================================================================== */
+
+.cal-cancelled-section {
+  padding: 16px 20px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.cal-cancelled-section summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.cal-cancelled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cal-cancelled-list button {
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.cal-count {
+  padding: 2px 7px;
+  border-radius: 99px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   RESPONSIVENESS
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .cal-split-layout {
+    grid-template-columns: 1fr;
+  }
+  .cal-sidebar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .cal-sidebar {
+    grid-template-columns: 1fr;
+  }
+  .cal-main-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cal-view-modes {
+    width: 100%;
+    justify-content: center;
+  }
+}

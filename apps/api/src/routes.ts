@@ -20,6 +20,7 @@ import {
   MAX_TASK_BLOCK_PAGE_SIZE,
   MAX_TASK_HISTORY_PAGE_SIZE,
 } from './modules/tasks/task-history.js';
+import { workerTick } from './jobs/worker-loop.js';
 
 export const router = Router();
 const db = () => getPrismaClient();
@@ -60,7 +61,6 @@ router.get('/bootstrap', async (req, res) => {
   const now = new Date();
   const range = horizonInput.parse({ fromDate: req.query.fromDate || now.toISOString(), toDate: req.query.toDate || new Date(+now + 7 * 86_400_000).toISOString() });
   const time = { startTime: { lt: range.toDate }, endTime: { gt: range.fromDate } };
-  await db().suggestion.updateMany({ where: { userId, status: 'PENDING', expiresAt: { lte: now } }, data: { status: 'EXPIRED' } });
   const [events, blocks, taskResult, suggestions, notifications, integrations, academicRecords, agendaOverview] = await Promise.all([
     db().event.findMany({ where: { userId, ...time }, orderBy: { startTime: 'asc' } }),
     db().taskScheduleBlock.findMany({ where: { userId, status: { not: 'CANCELLED' }, ...time }, include: { task: true }, orderBy: { startTime: 'asc' } }),
@@ -68,8 +68,8 @@ router.get('/bootstrap', async (req, res) => {
     Promise.all([
       // Never let accepted history crowd actionable UED occurrences out of the
       // bootstrap response. The separate caps keep the first application load bounded.
-      db().suggestion.findMany({ where: { userId, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db().suggestion.findMany({ where: { userId, status: { not: 'PENDING' } }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      db().suggestion.findMany({ where: { userId, status: 'PENDING', expiresAt: { gt: now } }, orderBy: { createdAt: 'desc' }, take: 500 }),
+      db().suggestion.findMany({ where: { userId, OR: [{ status: { not: 'PENDING' } }, { expiresAt: { lte: now } }] }, orderBy: { createdAt: 'desc' }, take: 100 }),
     ]).then(([pending, history]) => [...pending, ...history]),
     db().notification.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     db().integration.findMany({ where: { userId }, select: { provider: true, status: true, lastSyncAt: true, nextSyncAt: true, lastError: true, cursor: true } }),
@@ -113,7 +113,7 @@ router.patch('/tasks/:id', async (req, res) => {
     if (!previous) throw new ApiError(404, 'NOT_FOUND');
     const input = taskInput.parse({ ...previous, deadline: previous.deadline.toISOString(), ...req.body });
     if (+input.deadline <= Date.now()) throw new ApiError(400, 'DEADLINE_PASSED');
-    if (previous.status !== 'PENDING') throw new ApiError(409, 'TASK_NOT_PENDING');
+    if (previous.status !== 'PENDING' && previous.status !== 'IN_PROGRESS') throw new ApiError(409, 'TASK_NOT_EDITABLE');
     if (previous.scheduleBlocks.length && (input.durationMinutes !== previous.durationMinutes || +input.deadline !== +previous.deadline || input.isSplittable !== previous.isSplittable || (input.location || null) !== previous.location)) throw new ApiError(409, 'UNSCHEDULE_FIRST');
     const value = await tx.task.update({ where: { id }, data: input });
     await bumpVersion(tx, userId); return value;
@@ -237,6 +237,7 @@ router.patch('/integrations/ued/term', async (req, res) => {
     if (!integration || integration.status !== 'CONNECTED') throw new ApiError(409, 'INTEGRATION_NOT_CONNECTED');
     await tx.integration.update({ where: { id: integration.id }, data: { cursor: { ...(integration.cursor as Record<string, never>),
       uedTermMode: currentMode ? 'CURRENT' : 'SELECTED', uedTerm: term }, nextSyncAt: new Date() } });
+    void workerTick().catch(() => undefined);
     return { queued: true, term, mode: currentMode ? 'CURRENT' : 'SELECTED' };
   }));
 });
@@ -244,6 +245,7 @@ router.post('/integrations/:provider/sync', mutationLimit, async (req, res) => {
   const provider = z.enum(['UED', 'OUTLOOK']).parse(String(req.params.provider).toUpperCase());
   const result = await db().integration.updateMany({ where: { userId: req.user!.id, provider, status: 'CONNECTED' }, data: { nextSyncAt: new Date() } });
   if (!result.count) throw new ApiError(409, 'INTEGRATION_NOT_CONNECTED');
+  void workerTick().catch(() => undefined);
   res.status(202).json({ queued: true });
 });
 router.delete('/integrations/:provider', async (req, res) => {

@@ -325,13 +325,34 @@ export async function syncUed(integrationId: string, requestedTerm?: UedTerm): P
     const eventByExternalId = new Map(events.map(event => [event.externalId, event]));
     let imported = 0;
     let proposals = 0;
-    for (const record of snapshot.records) {
-      const data = { fields: record.fields, pageKey: record.pageKey, provider: 'UED',
-        ...(record.term ? { term: { ...record.term }, weekRanges: (snapshot.weekRanges || []).map(week => ({ ...week })) } : {}) };
-      await tx.academicRecord.upsert({ where: { userId_category_externalId: { userId: user.id, category: record.category, externalId: record.externalId } },
-        create: { userId: user.id, category: record.category, externalId: record.externalId, title: record.title,
-          data, syncedAt: now },
-        update: { title: record.title, data, syncedAt: now } });
+    if (typeof (tx as { $executeRaw?: unknown }).$executeRaw === 'function') {
+      for (let i = 0; i < snapshot.records.length; i += 50) {
+        const batch = snapshot.records.slice(i, i + 50);
+        const values = batch.map(record => {
+          const data = { fields: record.fields, pageKey: record.pageKey, provider: 'UED',
+            ...(record.term ? { term: { ...record.term }, weekRanges: (snapshot.weekRanges || []).map(week => ({ ...week })) } : {}) };
+          return { user_id: user.id, category: record.category, external_id: record.externalId,
+            title: record.title, data, synced_at: now.toISOString() };
+        });
+        await tx.$executeRaw`
+          INSERT INTO "academic_records" ("id", "user_id", "category", "external_id", "title", "data", "synced_at")
+          SELECT gen_random_uuid(), v."user_id"::uuid, v."category", v."external_id", v."title", v."data", v."synced_at"
+          FROM jsonb_to_recordset(${JSON.stringify(values)}::jsonb) AS v(
+            "user_id" TEXT, "category" TEXT, "external_id" TEXT, "title" TEXT, "data" JSONB, "synced_at" TIMESTAMPTZ
+          )
+          ON CONFLICT ("user_id", "category", "external_id")
+          DO UPDATE SET "title" = EXCLUDED."title", "data" = EXCLUDED."data", "synced_at" = EXCLUDED."synced_at"
+        `;
+      }
+    } else {
+      for (const record of snapshot.records) {
+        const data = { fields: record.fields, pageKey: record.pageKey, provider: 'UED',
+          ...(record.term ? { term: { ...record.term }, weekRanges: (snapshot.weekRanges || []).map(week => ({ ...week })) } : {}) };
+        await tx.academicRecord.upsert({ where: { userId_category_externalId: { userId: user.id, category: record.category, externalId: record.externalId } },
+          create: { userId: user.id, category: record.category, externalId: record.externalId, title: record.title,
+            data, syncedAt: now },
+          update: { title: record.title, data, syncedAt: now } });
+      }
     }
     for (const record of scheduledRows) {
       if (!record.schedule) continue;

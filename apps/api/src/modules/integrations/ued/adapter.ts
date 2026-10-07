@@ -253,3 +253,44 @@ export function mapUedRows(rows: Record<string, string>[], mapping: UedPageMappi
     return result;
   });
 }
+
+/**
+ * UED portal timetable matrix table (#tb_index) layout:
+ * - Cell 0 (TH): Weekday / Thứ (e.g. '2', '3', ..., '7', 'Chủ nhật')
+ * - Cell 1 (TD): Course code / Mã học phần
+ * - Cell 2 (TD): Class group / Lớp học phần
+ * - Cell 3 (TD): Capacity / Sĩ số
+ * - Cell 4 (TD): Course title / Tên học phần
+ * - Cell 5 (TD): Session / Buổi ('Sáng', 'Chiều', 'Tối')
+ * - Cells 6..20 (15 TDs): Period 1..15 matrix ('x' if active, empty if inactive)
+ * - Cell 21 (TD): Teacher name / Tên giảng viên
+ * - Cell 22 (TD): Classroom / Tên phòng
+ * - Cells 23.. (19+ TDs): Week 1..N matrix ('x' if active, empty if inactive)
+ */
+export function extractUedMatrixRow(cells: string[]): Record<string, string> {
+  const clean = cells.map(c => c.replace(/\s+/g, ' ').trim());
+  const weekday = clean[0] || '';
+  const courseCode = clean[1] || '';
+  const group = clean[2] || '';
+  const capacity = clean[3] || '';
+  const title = clean[4] || '';
+  const session = clean[5] || '';
+  const periodCells = clean.slice(6, 21);
+  const periods = periodCells.map((c, i) => /x/i.test(c) ? String((i + 1) % 10) : '-').join('');
+  const teacher = clean[21] || '';
+  const location = clean[22] || '';
+  const weekCells = clean.slice(23);
+  const weeks = weekCells.map((c, i) => /x/i.test(c) ? String((i + 1) % 10) : '-').join('');
+  return {
+    weekday,
+    courseCode,
+    group,
+    capacity,
+    title,
+    session,
+    periods,
+    teacher,
+    location,
+    weeks,
+  };
+}

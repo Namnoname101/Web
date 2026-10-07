@@ -41,7 +41,8 @@ export function publicUser(user: User) {
 export const protectMutations: RequestHandler = (req, _res, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     if (req.headers.origin !== config.webOrigin) throw new ApiError(403, 'ORIGIN_NOT_ALLOWED');
-    if (!req.is('application/json')) throw new ApiError(415, 'JSON_REQUIRED');
+    const hasBody = req.headers['content-length'] && req.headers['content-length'] !== '0';
+    if (hasBody && !req.is('application/json')) throw new ApiError(415, 'JSON_REQUIRED');
   }
   next();
 };

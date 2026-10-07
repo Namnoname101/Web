@@ -181,7 +181,7 @@ export function parseScheduleEmail(message: MailMessage, events: MailEvent[], ti
     if (!newRange || newRanges.length > (distinct.length === 1 ? 2 : 1)) return review;
     // Require explicit movement language leading into the new range/date.
     const moveText = text.slice(0, distinct.length === 2 ? targetDate.index : newRange.index);
-    if (!/\b(to|sang|den|new time|gio moi)\b/.test(moveText)) return review;
+    if (!/\b(?:moved?|rescheduled?|postponed?|shifted?|chuyen|doi)\s+(?:to|sang|den)\b/i.test(moveText) && !/\b(?:new time|gio moi|thoi gian moi)\b/i.test(moveText)) return review;
     const startTime = localInstant(targetDate.key, newRange.start, timezone);
     const endTime = localInstant(targetDate.key, newRange.end, timezone);
     if (!startTime || !endTime || startTime >= endTime) return review;

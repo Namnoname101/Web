@@ -28,3 +28,5 @@ const shutdown = createShutdownCoordinator({
 
 process.once('SIGINT', () => { void shutdown('SIGINT'); });
 process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+process.once('uncaughtException', (err) => { console.error('Uncaught exception', { name: err?.name, message: err?.message }); void shutdown('uncaughtException'); });
+process.once('unhandledRejection', (reason) => { console.error('Unhandled rejection', { reason: reason instanceof Error ? reason.message : String(reason) }); void shutdown('unhandledRejection'); });

@@ -16,7 +16,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     res.status(400).json({ error: { code: 'INVALID_JSON' } });
   } else {
     // Never log tokens, request bodies, connection strings or upstream responses.
-    console.error('Request failed', { name: error?.name, code: error?.code });
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Request failed', { name: error?.name, code: error?.code, message: error?.message, stack: error?.stack });
+    } else {
+      console.error('Request failed', { name: error?.name, code: error?.code });
+    }
     res.status(500).json({ error: { code: 'INTERNAL_ERROR' } });
   }
 };

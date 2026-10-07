@@ -61,7 +61,7 @@ const fixture = vi.hoisted(() => {
 vi.mock('playwright', () => ({ chromium: { launch: fixture.launch } }));
 
 import { getUedAdapter } from '../../src/modules/integrations/ued/adapter.js';
-import { closeChallenge, shutdownUed, startUedLogin, submitUedLogin,
+import { allowedPortalRequest, closeChallenge, shutdownUed, startUedLogin, submitUedLogin,
   UED_CHALLENGE_TTL_MS, UED_CONTEXT_CLOSE_TIMEOUT_MS } from '../../src/modules/integrations/ued/browser.js';
 
 describe('global UED login admission', () => {
@@ -176,5 +176,12 @@ describe('global UED login admission', () => {
 
     await Promise.all([startUedLogin(adapter), startUedLogin(adapter), startUedLogin(adapter)]);
     await expect(startUedLogin(adapter)).rejects.toMatchObject({ code: 'UED_CHALLENGE_CAPACITY' });
+  });
+});
+
+describe('allowedPortalRequest policy', () => {
+  it('allows same-origin GET and XHR to /index.php when in readPaths', () => {
+    expect(allowedPortalRequest('https://qlht.ued.udn.vn/index.php', 'GET', 'xhr', false, ['/', '/index.php'])).toBe(true);
+    expect(allowedPortalRequest('https://qlht.ued.udn.vn/index.php', 'GET', 'xhr', false, ['/'])).toBe(false);
   });
 });

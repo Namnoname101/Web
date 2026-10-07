@@ -6,6 +6,7 @@ import { cookie, cookieOptions, issueSession, publicUser } from '../../auth/sess
 import { getUedAdapter, uedReadiness } from './adapter.js';
 import { closeChallenge, startUedLogin, submitUedLogin, UED_CHALLENGE_TTL_MS } from './browser.js';
 import { connectVerifiedUed } from './ued.service.js';
+import { workerTick } from '../../../jobs/worker-loop.js';
 
 export const uedRouter = Router();
 const CHALLENGE_COOKIE = 'ued_challenge';
@@ -36,6 +37,7 @@ uedRouter.post('/auth/ued/submit', async (req, res) => {
   res.clearCookie(CHALLENGE_COOKIE, { path: challengeCookieOptions.path, secure: config.production });
   const user = await connectVerifiedUed(result.identity, result.storageState, req.user?.id);
   await issueSession(user.id, res);
+  void workerTick().catch(() => undefined);
   res.json({ status: 'CONNECTED', user: publicUser(user) });
 });
 uedRouter.delete('/auth/ued/challenge', async (req, res) => {

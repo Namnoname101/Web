@@ -131,6 +131,7 @@ export function filterSuggestions(suggestions: Suggestion[], filters: Suggestion
       suggestion.titleVi,
       suggestion.titleEn,
       suggestion.payload.eventTitle,
+      ...(suggestion.payload.blocks?.flatMap(block => [block.taskTitle, block.title, block.location]) || []),
       timing?.location,
       term?.academicYear,
       term?.semester,

@@ -9,6 +9,7 @@ function integrationErrorText(code: string, provider: Integration['provider'], t
     UED_REAUTH_REQUIRED: t('Phiên cổng UED đã hết hạn. Hãy kết nối lại để tiếp tục đồng bộ; dữ liệu đã lưu vẫn được giữ nguyên.', 'Your UED session has expired. Reconnect to keep syncing; saved data is unchanged.'),
     UED_IDENTITY_MISMATCH: t('Phiên UED không còn khớp tài khoản này. Hãy kết nối lại đúng mã sinh viên.', 'This UED session no longer matches the account. Reconnect with the correct student ID.'),
     UED_BROWSER_UNAVAILABLE: t('Máy chủ đồng bộ chưa có trình duyệt tự động. Quản trị viên cần hoàn tất cấu hình Playwright.', 'The sync server does not have its automation browser installed. An administrator must finish Playwright setup.'),
+    UED_PAGE_ENTRY_FAILED: t('Cổng UED đang chặn điều hướng (yêu cầu lưu xác nhận lý lịch hoặc đổi mật khẩu mặc định trên cổng trường). Hãy đăng nhập qlht.ued.udn.vn để hoàn tất rồi bấm Đồng bộ lại.', 'The UED portal is restricting navigation (requires confirming profile or changing default password on the portal). Please log in to qlht.ued.udn.vn to complete it, then click Sync again.'),
     SYNC_FAILED: t(`Lần đồng bộ ${provider} gần nhất chưa thành công. Dữ liệu cũ vẫn an toàn; hãy thử lại sau.`, `The latest ${provider} sync did not finish. Existing data is safe; try again later.`),
     OUTLOOK_REAUTH_REQUIRED: t('Phiên Microsoft đã hết hạn. Hãy kết nối lại Outlook.', 'Your Microsoft session has expired. Reconnect Outlook.'),
   };

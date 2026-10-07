@@ -20,13 +20,13 @@ test('student reviews an automatic plan before it changes the calendar', async (
   await expect(page.getByRole('button', { name: 'Công việc', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Công việc', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Danh sách công việc' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Việc cần làm', exact: true })).toBeVisible();
 
   const title = `E2E ôn tập ${Date.now()}`;
   await page.getByRole('button', { name: 'Thêm công việc' }).click();
-  const taskDialog = page.getByRole('dialog', { name: 'Thêm việc cần làm' });
+  const taskDialog = page.getByRole('dialog', { name: 'Thêm công việc' });
   await taskDialog.getByLabel('Tên công việc').fill(title);
-  await taskDialog.getByLabel('Thời lượng (phút)').fill('30');
+  await taskDialog.getByLabel('Thời lượng dự kiến').fill('30');
   await taskDialog.getByLabel('Độ ưu tiên').selectOption('HIGH');
   await taskDialog.getByRole('button', { name: 'Tạo công việc' }).click();
   await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible();
@@ -37,8 +37,9 @@ test('student reviews an automatic plan before it changes the calendar', async (
   expect(task?.isScheduled).toBe(false);
   expect(createdState.blocks.some(block => block.taskId === task?.id)).toBe(false);
 
-  await page.getByRole('button', { name: 'Gợi ý xếp lịch' }).click();
-  const planDialog = page.getByRole('dialog', { name: 'Tìm thời gian cho điều quan trọng' });
+  await page.getByRole('button', { name: 'Đề xuất xếp lịch' }).click();
+  await page.getByRole('button', { name: 'Tạo đề xuất mới' }).click();
+  const planDialog = page.getByRole('dialog', { name: 'Tạo đề xuất lịch' });
   await planDialog.getByRole('button', { name: 'Tạo đề xuất' }).click();
 
   const reviewDialog = page.getByRole('dialog', { name: 'Đề xuất sắp xếp công việc' });
@@ -47,7 +48,7 @@ test('student reviews an automatic plan before it changes the calendar', async (
   expect(proposedState.tasks.find(item => item.id === task?.id)?.isScheduled).toBe(false);
   expect(proposedState.blocks.some(block => block.taskId === task?.id)).toBe(false);
 
-  await reviewDialog.getByRole('button', { name: 'Chấp nhận đề xuất' }).click();
+  await reviewDialog.getByRole('button', { name: 'Thêm vào lịch' }).click();
   await expect(reviewDialog).toBeHidden();
   const acceptedState = await bootstrap(page);
   expect(acceptedState.tasks.find(item => item.id === task?.id)?.isScheduled).toBe(true);
@@ -60,12 +61,14 @@ test('student reviews an automatic plan before it changes the calendar', async (
   await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible();
 });
 
-test('student workspace fits a 390px mobile viewport', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+for (const width of [390, 768, 1440]) test(`student workspace fits a ${width}px viewport with keyboard navigation`, async ({ page }, testInfo) => {
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => consoleErrors.push(error.message));
+  await page.setViewportSize({ width, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
-  await expect(page.getByRole('heading', { name: /Một ngày/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Lịch trình hôm nay' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /của bạn$/ })).toBeVisible();
+  await expect(page.locator('.dash-today').getByRole('heading', { name: 'Lịch hôm nay' })).toBeVisible();
   const todayTab = page.getByRole('tab', { name: /^Hôm nay/ });
   await expect(todayTab).toBeVisible();
   await todayTab.focus();
@@ -73,17 +76,38 @@ test('student workspace fits a 390px mobile viewport', async ({ page }) => {
   await expect(page.getByRole('tab', { name: /^Sắp tới/ })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: /^Sắp tới/ }).press('End');
   await expect(page.getByRole('tab', { name: /^Đã qua/ })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: /^Đã qua/ }).press('Home');
+  await expect(todayTab).toBeFocused();
+  await expect(todayTab).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  await page.getByRole('button', { name: 'Mở menu' }).click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath(`dashboard-${width}.png`), fullPage: true });
+  if (width <= 780) {
+    const openMenu = page.getByRole('button', { name: 'Mở menu' });
+    await openMenu.click();
+    const sidebar = page.getByRole('complementary', { name: 'Menu ứng dụng' });
+    const closeMenu = sidebar.getByRole('button', { name: 'Đóng menu' });
+    await expect(closeMenu).toBeFocused();
+    await closeMenu.press('Shift+Tab');
+    await expect(sidebar.getByRole('button', { name: 'Đăng xuất' })).toBeFocused();
+    await sidebar.getByRole('button', { name: 'Đăng xuất' }).press('Tab');
+    await expect(closeMenu).toBeFocused();
+    await closeMenu.press('Escape');
+    await expect(openMenu).toBeFocused();
+    await expect(openMenu).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toHaveCount(0);
+    await openMenu.click();
+  }
   await page.getByRole('button', { name: 'Lịch của tôi', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Lịch của tôi' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Lịch tuần', exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(consoleErrors).toEqual([]);
 });
 
 test('an activity that ended earlier today remains in Today and Past', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
-  await expect(page.getByRole('heading', { name: 'Lịch trình hôm nay' })).toBeVisible();
+  await expect(page.locator('.dash-today').getByRole('heading', { name: 'Lịch hôm nay' })).toBeVisible();
   let state = await bootstrap(page);
   // At exact midnight wait for a positive overlap, using server time instead
   // of skipping the regression or trusting the machine running the browser.
@@ -107,14 +131,13 @@ test('an activity that ended earlier today remains in Today and Past', async ({ 
 
   await page.getByRole('button', { name: 'Tải lại dữ liệu' }).click();
   await expect(page.getByRole('tab', { name: /^Hôm nay 1$/ })).toBeVisible();
-  const weeklyAgenda = page.locator('.weekly-agenda-panel');
-  await expect(weeklyAgenda.getByText('1 hoạt động · 1 đã qua')).toBeVisible();
-  const weeklyPastActivity = weeklyAgenda.getByRole('button', { name: new RegExp(`${title}.*Đã qua`) });
-  await expect(weeklyPastActivity).toBeVisible();
-  await expect(weeklyPastActivity).toHaveClass(/is-past/);
-  await expect(page.locator('.today-agenda-panel').getByRole('button', { name: new RegExp(`${title}.*Đã qua`) })).toBeVisible();
+  const today = page.locator('.dash-today');
+  await expect(today.getByText('1 hoạt động · 1 đã qua')).toBeVisible();
+  const pastActivity = today.getByRole('button', { name: new RegExp(`${title}.*Đã qua`) });
+  await expect(pastActivity).toBeVisible();
+  await expect(pastActivity).toHaveClass(/is-past/);
   await page.getByRole('tab', { name: /^Đã qua/ }).click();
-  await expect(page.locator('.today-agenda-panel').getByRole('button', { name: new RegExp(`${title}.*Đã qua`) })).toBeVisible();
+  await expect(today.getByRole('button', { name: new RegExp(`${title}.*Đã qua`) })).toBeVisible();
   await page.getByRole('button', { name: 'Lịch của tôi', exact: true }).click();
   const calendarPastActivity = page.locator('.calendar-panel').getByRole('button', { name: new RegExp(`${title}.*Đã qua`) });
   await expect(calendarPastActivity).toBeVisible();
