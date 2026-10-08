@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, CalendarCheck2, CheckCheck, GraduationCap, Refres
 import { ConfirmDialog, ErrorNotice, Spinner, type Translate } from './components';
 import { isPersonalEvent } from './calendar-data';
 import { AppShell, PageHeader } from './AppShell';
+import { AuthProvider, LocaleProvider, ClockProvider } from './contexts';
 
 const EventForm = lazy(() => import('./components').then(m => ({ default: m.EventForm })));
 const EventDetails = lazy(() => import('./workspace').then(m => ({ default: m.EventDetails })));
@@ -58,13 +59,17 @@ export default function App() {
     trackedToday.current = { userId: value.id, day };
     setNow(instant); setUser(value); chooseLocale(value.locale); setWeek(monday(day)); setSelectedDay(day);
   };
+  const bootstrapAbortRef = useRef<AbortController | null>(null);
   const bootstrap = useCallback(async () => {
     if (!user) return;
     const request = ++requestNumber.current;
+    bootstrapAbortRef.current?.abort();
+    const controller = new AbortController();
+    bootstrapAbortRef.current = controller;
     const requestStartedAt = performance.now();
     const params = new URLSearchParams({ fromDate: dayStart(week, user.timezone), toDate: dayStart(shiftDay(week, 7), user.timezone) });
     try {
-      const result = await api<Bootstrap>(`/bootstrap?${params}`);
+      const result = await api<Bootstrap>(`/bootstrap?${params}`, 'GET', undefined, controller.signal);
       if (request !== requestNumber.current) return;
       const responseReceivedAt = performance.now();
       if (clock.current.synchronize(result.agendaOverview.asOf, requestStartedAt, responseReceivedAt)) {
@@ -72,6 +77,7 @@ export default function App() {
       }
       setData(current => expandedTaskHistory.current ? preserveExpandedHistory(current, result) : result); setLoadedWeek(week); setUser(previous => previous?.id === result.user.id ? result.user : previous);
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return;
       if (request !== requestNumber.current) return;
       if (err instanceof ApiError && err.status === 401) { setUser(null); setData(null); setDialog(null); }
       throw err;
@@ -235,33 +241,39 @@ export default function App() {
     integrations: [t('Kết nối dữ liệu', 'Data connections'), t('UED là nguồn lịch học chính. Outlook là kết nối tùy chọn.', 'UED is the primary timetable source. Outlook is optional.')],
     settings: [t('Cài đặt', 'Settings'), t('Giờ hoạt động, giờ nghỉ và quy tắc xếp lịch.', 'Active hours, breaks and scheduling rules.')],
   };
-  return <>
-    <AppShell user={user} locale={locale} t={t} view={view} now={now} unread={unread}
-      loading={loading} busy={busy} menuOpen={menu} setMenuOpen={setMenu} navigate={navigate}
-      refresh={() => void refresh()} logout={() => void logout()} chooseLocale={chooseLocale}>
-        {!['dashboard', 'calendar', 'suggestions', 'tasks'].includes(view) && <PageHeader title={titles[view][0]} description={titles[view][1]} />}
-        {error && <div className="global-error"><ErrorNotice>{error}</ErrorNotice><button className="icon-button" onClick={() => setError('')} aria-label={t('Ẩn lỗi', 'Dismiss error')}><X size={16} /></button></div>}
-        {!data ? <section className="panel loading-panel"><Spinner /><p>{t('Đang tải lịch và công việc của bạn…', 'Loading your calendar and tasks…')}</p>{!loading && <button className="button button-secondary" onClick={refresh}>{t('Thử lại', 'Try again')}</button>}</section> : <Suspense fallback={<section className="panel loading-panel"><Spinner /><p>{t('Đang tải…', 'Loading…')}</p></section>}>
-          {view === 'dashboard' && <Dashboard data={data} user={user} locale={locale} t={t} navigate={navigate} showAgenda={showAgenda} showTask={showTask} newTask={() => setDialog({ kind: 'task' })} now={now} week={week} loading={loading} />}
-          {view === 'calendar' && <CalendarPage data={data} user={user} locale={locale} t={t} days={days} week={week} setWeek={setWeek} selectedDay={selectedDay} setSelectedDay={setSelectedDay} addEvent={day => { setSelectedDay(day); setDialog({ kind: 'event' }); }} showEvent={event => setDialog({ kind: 'event-detail', event })} showTask={showTask} openSuggestions={() => navigate('suggestions')} pendingCount={waiting.length} loading={loading} rangeReady={loadedWeek === week} error={error} retry={() => void refresh()} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} />}
-          {view === 'tasks' && <TasksPage tasks={data.tasks} stats={data.taskStats} historyPage={data.taskHistoryPage} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} planner={() => navigate('suggestions')} loading={loading} error={error} retry={() => void refresh()} />}
-          {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} tasks={data.tasks} now={now} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} back={() => navigate('calendar')} />}
-          {view === 'notifications' && <NotificationsPage notifications={data.notifications} user={user} locale={locale} t={t} busy={busy} read={id => globalAction(() => mutate(id ? `/notifications/${id}/read` : '/notifications/read-all', 'POST', {}, t('Đã đánh dấu đã đọc.', 'Marked as read.')))} />}
-          {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => { await mutate('/integrations/ued/term', 'PATCH', body, t('Đã đổi học kỳ. Dữ liệu sẽ cập nhật sau khi đồng bộ.', 'Term updated. Records will refresh after syncing.')); }} sync={provider => globalAction(() => mutate(`/integrations/${provider}/sync`, 'POST', {}, t('Đã yêu cầu đồng bộ. Kết quả sẽ tự cập nhật tại đây.', 'Sync requested. Results will update here automatically.')))} disconnect={provider => setDialog({ kind: 'confirm-disconnect', provider })} />}
-          {view === 'settings' && <SettingsPage key={user.id} user={user} locale={locale} t={t} save={async body => { const result = await api<{ user: User }>('/settings', 'PATCH', body); setUser(result.user); chooseLocale(result.user.locale); await bootstrap(); }} />}
-        </Suspense>}
-    </AppShell>
-    {toast && <div className="toast" role="status"><CheckCheck size={18} />{toast}<button onClick={() => setToast('')} aria-label={t('Đóng', 'Close')}><X size={15} /></button></div>}
-    {dialog?.kind === 'confirm-disconnect' && <ConfirmDialog title={t(`Ngắt kết nối ${dialog.provider}`, `Disconnect ${dialog.provider}`)} message={t(`Ngắt kết nối ${dialog.provider}? Các lịch đã chấp nhận vẫn được giữ lại.`, `Disconnect ${dialog.provider}? Your accepted calendar events will be kept.`)} confirmLabel={t('Ngắt kết nối', 'Disconnect')} cancelLabel={t('Hủy', 'Cancel')} danger busy={busy} onConfirm={async () => { const provider = dialog.provider; close(); await globalAction(() => mutate(`/integrations/${provider}`, 'DELETE', undefined, t('Đã ngắt kết nối.', 'Disconnected.'))); }} onCancel={close} />}
-    <Suspense fallback={null}>
-      {dialog?.kind === 'ued' && <UedConnect locale={locale} t={t} connected={value => { identify(value); void refresh(); }} close={close} />}
-      {dialog?.kind === 'task' && <TaskForm now={now} task={dialog.task} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await taskMutation(id ? `/tasks/${id}` : '/tasks', id ? 'PATCH' : 'POST', body, t('Đã lưu công việc.', 'Task saved.')); }} />}
-      {dialog?.kind === 'event' && <EventForm event={dialog.event} day={selectedDay} user={user} locale={locale} t={t} close={close} save={async (body, id) => { if (dialog.event && !isPersonalEvent(dialog.event)) return; await calendarMutation(id ? `/events/${id}` : '/events', id ? 'PATCH' : 'POST', body, t('Đã lưu lịch cá nhân.', 'Personal event saved.')); }} />}
-      {dialog?.kind === 'plan' && <PlanForm now={now} user={user} locale={locale} t={t} close={close} propose={async (fromDate, toDate) => { const suggestion = await api<Suggestion>('/scheduling/proposals', 'POST', { fromDate, toDate }); setData(current => current ? { ...current, suggestions: [suggestion, ...current.suggestions.filter(item => item.id !== suggestion.id)] } : current); try { await bootstrap(); } catch (err) { setError(errorMessage(err, locale)); } setDialog({ kind: 'proposal', suggestion }); }} />}
-      {dialog?.kind === 'proposal' && <SuggestionDetails now={now} suggestion={data?.suggestions.find(item => item.id === dialog.suggestion.id) || dialog.suggestion} tasks={data?.tasks} user={user} locale={locale} t={t} close={close} decide={async (id, action) => { await calendarMutation(`/suggestions/${id}/${action}`, 'POST', {}, action === 'accept' ? t('Đã cập nhật lịch theo đề xuất bạn chọn.', 'Your calendar has been updated with your choice.') : t('Đã bỏ đề xuất.', 'Proposal dismissed.'), () => setData(current => current ? { ...current, suggestions: current.suggestions.map(item => item.id === id ? { ...item, status: action === 'accept' ? 'ACCEPTED' : 'REJECTED' } : item) } : current)); }} />}
-      {dialog?.kind === 'task-detail' && <TaskDetails key={dialog.task.id} now={now} task={data?.tasks.find(task => task.id === dialog.task.id) || dialog.task} user={user} locale={locale} t={t} close={close} edit={task => setDialog({ kind: 'task', task })} planner={() => { close(); navigate('suggestions'); }} status={async (task, status) => { await taskMutation(`/tasks/${task.id}/status`, 'PATCH', { status }, t('Đã cập nhật trạng thái.', 'Status updated.'), task); close(); }} unschedule={async task => { await taskMutation(`/tasks/${task.id}/unschedule`, 'POST', {}, t('Đã bỏ các phiên học chưa bắt đầu. Bạn có thể tạo gợi ý mới.', 'Future sessions removed. You can generate a new plan.'), task); close(); }} />}
-      {dialog?.kind === 'event-detail' && <EventDetails event={dialog.event} user={user} locale={locale} t={t} close={close} edit={event => { if (isPersonalEvent(event)) setDialog({ kind: 'event', event }); }} status={async (event, status) => { if (!isPersonalEvent(event)) return; await calendarMutation(`/events/${event.id}/status`, 'PATCH', { status }, t('Đã cập nhật lịch cá nhân.', 'Personal event updated.')); close(); }} />}
-    </Suspense>
-  </>;
+  return (
+    <AuthProvider initialUser={user} initialConfig={config}>
+      <LocaleProvider initialLocale={locale}>
+        <ClockProvider>
+          <AppShell user={user} locale={locale} t={t} view={view} now={now} unread={unread}
+            loading={loading} busy={busy} menuOpen={menu} setMenuOpen={setMenu} navigate={navigate}
+            refresh={() => void refresh()} logout={() => void logout()} chooseLocale={chooseLocale}>
+              {!['dashboard', 'calendar', 'suggestions', 'tasks'].includes(view) && <PageHeader title={titles[view][0]} description={titles[view][1]} />}
+              {error && <div className="global-error"><ErrorNotice>{error}</ErrorNotice><button className="icon-button" onClick={() => setError('')} aria-label={t('Ẩn lỗi', 'Dismiss error')}><X size={16} /></button></div>}
+              {!data ? <section className="panel loading-panel"><Spinner /><p>{t('Đang tải lịch và công việc của bạn…', 'Loading your calendar and tasks…')}</p>{!loading && <button className="button button-secondary" onClick={refresh}>{t('Thử lại', 'Try again')}</button>}</section> : <Suspense fallback={<section className="panel loading-panel"><Spinner /><p>{t('Đang tải…', 'Loading…')}</p></section>}>
+                {view === 'dashboard' && <Dashboard data={data} user={user} locale={locale} t={t} navigate={navigate} showAgenda={showAgenda} showTask={showTask} newTask={() => setDialog({ kind: 'task' })} now={now} week={week} loading={loading} />}
+                {view === 'calendar' && <CalendarPage data={data} user={user} locale={locale} t={t} days={days} week={week} setWeek={setWeek} selectedDay={selectedDay} setSelectedDay={setSelectedDay} addEvent={day => { setSelectedDay(day); setDialog({ kind: 'event' }); }} showEvent={event => setDialog({ kind: 'event-detail', event })} showTask={showTask} openSuggestions={() => navigate('suggestions')} pendingCount={waiting.length} loading={loading} rangeReady={loadedWeek === week} error={error} retry={() => void refresh()} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} />}
+                {view === 'tasks' && <TasksPage tasks={data.tasks} stats={data.taskStats} historyPage={data.taskHistoryPage} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} planner={() => navigate('suggestions')} loading={loading} error={error} retry={() => void refresh()} />}
+                {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} tasks={data.tasks} now={now} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} back={() => navigate('calendar')} />}
+                {view === 'notifications' && <NotificationsPage notifications={data.notifications} user={user} locale={locale} t={t} busy={busy} read={id => globalAction(() => mutate(id ? `/notifications/${id}/read` : '/notifications/read-all', 'POST', {}, t('Đã đánh dấu đã đọc.', 'Marked as read.')))} />}
+                {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => { await mutate('/integrations/ued/term', 'PATCH', body, t('Đã đổi học kỳ. Dữ liệu sẽ cập nhật sau khi đồng bộ.', 'Term updated. Records will refresh after syncing.')); }} sync={provider => globalAction(() => mutate(`/integrations/${provider}/sync`, 'POST', {}, t('Đã yêu cầu đồng bộ. Kết quả sẽ tự cập nhật tại đây.', 'Sync requested. Results will update here automatically.')))} disconnect={provider => setDialog({ kind: 'confirm-disconnect', provider })} />}
+                {view === 'settings' && <SettingsPage key={user.id} user={user} locale={locale} t={t} save={async body => { const result = await api<{ user: User }>('/settings', 'PATCH', body); setUser(result.user); chooseLocale(result.user.locale); await bootstrap(); }} />}
+              </Suspense>}
+          </AppShell>
+          {toast && <div className="toast" role="status"><CheckCheck size={18} />{toast}<button onClick={() => setToast('')} aria-label={t('Đóng', 'Close')}><X size={15} /></button></div>}
+          {dialog?.kind === 'confirm-disconnect' && <ConfirmDialog title={t(`Ngắt kết nối ${dialog.provider}`, `Disconnect ${dialog.provider}`)} message={t(`Ngắt kết nối ${dialog.provider}? Các lịch đã chấp nhận vẫn được giữ lại.`, `Disconnect ${dialog.provider}? Your accepted calendar events will be kept.`)} confirmLabel={t('Ngắt kết nối', 'Disconnect')} cancelLabel={t('Hủy', 'Cancel')} danger busy={busy} onConfirm={async () => { const provider = dialog.provider; close(); await globalAction(() => mutate(`/integrations/${provider}`, 'DELETE', undefined, t('Đã ngắt kết nối.', 'Disconnected.'))); }} onCancel={close} />}
+          <Suspense fallback={null}>
+            {dialog?.kind === 'ued' && <UedConnect locale={locale} t={t} connected={value => { identify(value); void refresh(); }} close={close} />}
+            {dialog?.kind === 'task' && <TaskForm now={now} task={dialog.task} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await taskMutation(id ? `/tasks/${id}` : '/tasks', id ? 'PATCH' : 'POST', body, t('Đã lưu công việc.', 'Task saved.')); }} />}
+            {dialog?.kind === 'event' && <EventForm event={dialog.event} day={selectedDay} user={user} locale={locale} t={t} close={close} save={async (body, id) => { if (dialog.event && !isPersonalEvent(dialog.event)) return; await calendarMutation(id ? `/events/${id}` : '/events', id ? 'PATCH' : 'POST', body, t('Đã lưu lịch cá nhân.', 'Personal event saved.')); }} />}
+            {dialog?.kind === 'plan' && <PlanForm now={now} user={user} locale={locale} t={t} close={close} propose={async (fromDate, toDate) => { const suggestion = await api<Suggestion>('/scheduling/proposals', 'POST', { fromDate, toDate }); setData(current => current ? { ...current, suggestions: [suggestion, ...current.suggestions.filter(item => item.id !== suggestion.id)] } : current); try { await bootstrap(); } catch (err) { setError(errorMessage(err, locale)); } setDialog({ kind: 'proposal', suggestion }); }} />}
+            {dialog?.kind === 'proposal' && <SuggestionDetails now={now} suggestion={data?.suggestions.find(item => item.id === dialog.suggestion.id) || dialog.suggestion} tasks={data?.tasks} user={user} locale={locale} t={t} close={close} decide={async (id, action) => { await calendarMutation(`/suggestions/${id}/${action}`, 'POST', {}, action === 'accept' ? t('Đã cập nhật lịch theo đề xuất bạn chọn.', 'Your calendar has been updated with your choice.') : t('Đã bỏ đề xuất.', 'Proposal dismissed.'), () => setData(current => current ? { ...current, suggestions: current.suggestions.map(item => item.id === id ? { ...item, status: action === 'accept' ? 'ACCEPTED' : 'REJECTED' } : item) } : current)); }} />}
+            {dialog?.kind === 'task-detail' && <TaskDetails key={dialog.task.id} now={now} task={data?.tasks.find(task => task.id === dialog.task.id) || dialog.task} user={user} locale={locale} t={t} close={close} edit={task => setDialog({ kind: 'task', task })} planner={() => { close(); navigate('suggestions'); }} status={async (task, status) => { await taskMutation(`/tasks/${task.id}/status`, 'PATCH', { status }, t('Đã cập nhật trạng thái.', 'Status updated.'), task); close(); }} unschedule={async task => { await taskMutation(`/tasks/${task.id}/unschedule`, 'POST', {}, t('Đã bỏ các phiên học chưa bắt đầu. Bạn có thể tạo gợi ý mới.', 'Future sessions removed. You can generate a new plan.'), task); close(); }} />}
+            {dialog?.kind === 'event-detail' && <EventDetails event={dialog.event} user={user} locale={locale} t={t} close={close} edit={event => { if (isPersonalEvent(event)) setDialog({ kind: 'event', event }); }} status={async (event, status) => { if (!isPersonalEvent(event)) return; await calendarMutation(`/events/${event.id}/status`, 'PATCH', { status }, t('Đã cập nhật lịch cá nhân.', 'Personal event updated.')); close(); }} />}
+          </Suspense>
+        </ClockProvider>
+      </LocaleProvider>
+    </AuthProvider>
+  );
 }
 function Brand() { return <div className="brand"><span className="brand-icon"><CalendarCheck2 size={24} /></span><span>uni<span className="brand-accent">rhythm</span><small>PLAN A LITTLE. LIVE A LOT.</small></span></div>; }

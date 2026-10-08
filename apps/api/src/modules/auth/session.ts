@@ -8,6 +8,7 @@ import { clock } from '../scheduling/planner.js';
 declare global { namespace Express { interface Request { user?: User; sessionId?: string } } }
 export const SESSION_COOKIE = 'ued_session';
 export function cookie(req: Request, name: string): string | undefined {
+  if (req.cookies && typeof req.cookies[name] === 'string') return req.cookies[name];
   const value = req.headers.cookie?.split(';').map(x => x.trim()).find(x => x.startsWith(`${name}=`))?.slice(name.length + 1);
   try { return value ? decodeURIComponent(value) : undefined; } catch { return undefined; }
 }

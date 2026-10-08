@@ -14,6 +14,7 @@
   "dependencies": {
     "@personal-schedule/database": "*",
     "@personal-schedule/shared": "*",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
@@ -26,6 +27,7 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/html-to-text": "^9.0.4",

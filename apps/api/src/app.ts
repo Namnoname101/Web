@@ -12,6 +12,8 @@ import { getPrismaClient } from '@personal-schedule/database';
 import { outlookRouter } from './modules/integrations/outlook/outlook.router.js';
 import { uedRouter } from './modules/integrations/ued/ued.routes.js';
 
+import cookieParser from 'cookie-parser';
+
 export const app = express();
 const readinessLimit = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false,
   message: { error: { code: 'READINESS_RATE_LIMIT' } } });
@@ -78,7 +80,21 @@ const checkDatabaseReadiness = createReadinessCheck(
 
 app.disable('x-powered-by');
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", config.webOrigin],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+app.use(cookieParser());
 app.use(
   cors({
     origin: config.webOrigin,

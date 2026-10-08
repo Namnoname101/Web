@@ -5,9 +5,9 @@ import type { Locale } from './types';
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); }
 }
-export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/v1${path}`, {
-    method, credentials: 'include',
+    method, credentials: 'include', signal,
     headers: method === 'GET' ? { Accept: 'application/json' } : { 'Content-Type': 'application/json', Accept: 'application/json' },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });

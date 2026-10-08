@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@personal-schedule/shared": "*",
+    "@tanstack/react-query": "^5.104.1",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "lucide-react": "^1.45.0",

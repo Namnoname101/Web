@@ -21,10 +21,12 @@ import {
   MAX_TASK_HISTORY_PAGE_SIZE,
 } from './modules/tasks/task-history.js';
 import { workerTick } from './jobs/worker-loop.js';
+import { scopedDb } from './lib/scoped-query.js';
 
 export const router = Router();
 const db = () => getPrismaClient();
 const mutationLimit = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false });
+const bootstrapLimit = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false });
 
 function publicIntegrations<T extends { provider: 'UED' | 'OUTLOOK'; cursor: unknown }>(integrations: T[]) {
   return integrations.map(({ cursor, ...integration }) => {
@@ -56,24 +58,23 @@ router.post('/auth/logout', async (req, res) => {
 });
 router.use(requireUser);
 
-router.get('/bootstrap', async (req, res) => {
+router.get('/bootstrap', bootstrapLimit, async (req, res) => {
   const userId = req.user!.id;
+  const userDb = scopedDb(userId);
   const now = new Date();
   const range = horizonInput.parse({ fromDate: req.query.fromDate || now.toISOString(), toDate: req.query.toDate || new Date(+now + 7 * 86_400_000).toISOString() });
   const time = { startTime: { lt: range.toDate }, endTime: { gt: range.fromDate } };
   const [events, blocks, taskResult, suggestions, notifications, integrations, academicRecords, agendaOverview] = await Promise.all([
-    db().event.findMany({ where: { userId, ...time }, orderBy: { startTime: 'asc' } }),
-    db().taskScheduleBlock.findMany({ where: { userId, status: { not: 'CANCELLED' }, ...time }, include: { task: true }, orderBy: { startTime: 'asc' } }),
+    userDb.event.findMany({ where: time, orderBy: { startTime: 'asc' } }),
+    userDb.taskScheduleBlock.findMany({ where: { status: { not: 'CANCELLED' }, ...time }, include: { task: true }, orderBy: { startTime: 'asc' } } as any),
     getBootstrapTasks(userId),
     Promise.all([
-      // Never let accepted history crowd actionable UED occurrences out of the
-      // bootstrap response. The separate caps keep the first application load bounded.
-      db().suggestion.findMany({ where: { userId, status: 'PENDING', expiresAt: { gt: now } }, orderBy: { createdAt: 'desc' }, take: 500 }),
-      db().suggestion.findMany({ where: { userId, OR: [{ status: { not: 'PENDING' } }, { expiresAt: { lte: now } }] }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      userDb.suggestion.findMany({ where: { status: 'PENDING', expiresAt: { gt: now } }, orderBy: { createdAt: 'desc' }, take: 500 }),
+      userDb.suggestion.findMany({ where: { OR: [{ status: { not: 'PENDING' } }, { expiresAt: { lte: now } }] }, orderBy: { createdAt: 'desc' }, take: 100 }),
     ]).then(([pending, history]) => [...pending, ...history]),
-    db().notification.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
-    db().integration.findMany({ where: { userId }, select: { provider: true, status: true, lastSyncAt: true, nextSyncAt: true, lastError: true, cursor: true } }),
-    db().academicRecord.findMany({ where: { userId }, orderBy: { syncedAt: 'desc' }, take: 200 }),
+    userDb.notification.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }),
+    userDb.integration.findMany({ select: { provider: true, status: true, lastSyncAt: true, nextSyncAt: true, lastError: true, cursor: true } }),
+    userDb.academicRecord.findMany({ orderBy: { syncedAt: 'desc' }, take: 200 }),
     getAgendaOverview(userId, req.user!.timezone, now),
   ]);
   res.json({ user: publicUser(req.user!), events, blocks, tasks: taskResult.tasks, taskHistoryPage: taskResult.page, taskStats: taskResult.stats,
@@ -216,15 +217,15 @@ router.post('/suggestions/:id/reject', async (req, res) => {
   }));
 });
 router.post('/notifications/read-all', async (req, res) => {
-  await db().notification.updateMany({ where: { userId: req.user!.id, readAt: null }, data: { readAt: new Date() } });
+  await scopedDb(req.user!.id).notification.updateMany({ where: { readAt: null }, data: { readAt: new Date() } });
   res.json({ read: true });
 });
 router.post('/notifications/:id/read', async (req, res) => {
-  const result = await db().notification.updateMany({ where: { id: idSchema.parse(req.params.id), userId: req.user!.id }, data: { readAt: new Date() } });
+  const result = await scopedDb(req.user!.id).notification.updateMany({ where: { id: idSchema.parse(req.params.id) }, data: { readAt: new Date() } });
   if (!result.count) throw new ApiError(404, 'NOT_FOUND');
   res.json({ read: true });
 });
-router.get('/integrations', async (req, res) => res.json(await db().integration.findMany({ where: { userId: req.user!.id }, select: { provider: true, status: true, lastSyncAt: true, nextSyncAt: true, lastError: true } })));
+router.get('/integrations', async (req, res) => res.json(await scopedDb(req.user!.id).integration.findMany({ select: { provider: true, status: true, lastSyncAt: true, nextSyncAt: true, lastError: true } })));
 router.patch('/integrations/ued/term', async (req, res) => {
   const selection = z.union([
     z.object({ mode: z.literal('CURRENT') }).strict(),

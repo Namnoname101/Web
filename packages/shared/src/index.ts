@@ -1,2 +1,2 @@
 // Shared constants, validation schemas, and transport types are exported here.
-export {};
+export * from './status-labels.js';
