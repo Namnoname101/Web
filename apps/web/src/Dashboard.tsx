@@ -81,6 +81,7 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
   const pending = useMemo(() => data.suggestions.filter((item: Suggestion) => isSuggestionPending(item, now)), [data.suggestions, now]);
   const plans = useMemo(() => pending.filter((item: Suggestion) => item.kind === 'TASK_PLAN'), [pending]);
   const unread = useMemo(() => data.notifications.filter((item: { readAt: string | null }) => !item.readAt).length, [data.notifications]);
+  const todayFinished = agenda.today.length > 0 && agenda.upcomingToday.length === 0 && agenda.current.length === 0;
   const focus = agenda.current[0] || agenda.next;
   const focusCurrent = focus && temporalState(focus, now) === 'CURRENT';
   const deltaMinutes = focus ? Math.max(0, Math.ceil((Date.parse(focus.startTime) - now) / 60_000)) : 0;
@@ -189,12 +190,48 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
     )}
 
     <div className="dash-priority-grid">
-      <Panel className="dash-next">
-        <span className="dash-next-time" aria-hidden="true">{focus ? <><strong>{formatDate(focus.startTime, user.timezone, 'HH:mm', locale)}</strong><small>{formatDate(focus.startTime, user.timezone, 'dd/MM', locale)}</small></> : <CalendarDays size={24} />}</span>
-        <div className="dash-next-copy"><span className="app-eyebrow">{focusCurrent ? t('ĐANG DIỄN RA', 'IN PROGRESS') : t('LỊCH TIẾP THEO', 'NEXT ACTIVITY')}</span>
-          <h2>{focus ? <button onClick={() => showAgenda(focus)}>{focus.title}<ChevronRight size={15} /></button> : t('Chưa có lịch sắp tới', 'No upcoming activities')}</h2>
-          {focus ? <><p>{formatDate(focus.startTime, user.timezone, 'EEE, dd/MM · HH:mm', locale)}–{formatDate(focus.endTime, user.timezone, 'dd/MM HH:mm', locale)}{!focusCurrent && ` · ${t('còn', 'in')} ${minutes(deltaMinutes, locale)}`}</p>{focus.location && <p><MapPin size={12} />{focus.location}</p>}<small>{itemKind(focus, t)}</small></> : <p>{t('Mở lịch để xem hoặc thêm lịch cá nhân.', 'Open the calendar to view or add a personal event.')}</p>}
-        </div><button className="button button-quiet small-button" onClick={() => navigate('calendar')}>{t('Mở lịch', 'Open calendar')}</button>
+      <Panel className={`dash-next ${todayFinished ? 'dash-today-finished' : ''}`}>
+        <span className="dash-next-time" aria-hidden="true">
+          {todayFinished ? (
+            <span className="dash-finish-icon"><CheckCheck size={28} /></span>
+          ) : focus ? (
+            <><strong>{formatDate(focus.startTime, user.timezone, 'HH:mm', locale)}</strong><small>{formatDate(focus.startTime, user.timezone, 'dd/MM', locale)}</small></>
+          ) : (
+            <CalendarDays size={24} />
+          )}
+        </span>
+        <div className="dash-next-copy">
+          <span className="app-eyebrow">
+            {todayFinished ? t('🎉 ĐÃ XONG LỊCH HÔM NAY', '🎉 ALL DONE FOR TODAY') : focusCurrent ? t('ĐANG DIỄN RA', 'IN PROGRESS') : t('LỊCH TIẾP THEO', 'NEXT ACTIVITY')}
+          </span>
+          <h2>
+            {todayFinished ? (
+              <span>{t('Bạn đã hoàn thành mọi lịch trình hôm nay!', 'You finished all activities today!')}</span>
+            ) : focus ? (
+              <button onClick={() => showAgenda(focus)}>{focus.title}<ChevronRight size={15} /></button>
+            ) : (
+              t('Chưa có lịch sắp tới', 'No upcoming activities')
+            )}
+          </h2>
+          {todayFinished ? (
+            focus ? (
+              <p>
+                {t('Lịch tiếp theo vào ngày mai:', 'Next activity tomorrow:')} <strong>{focus.title}</strong> ({formatDate(focus.startTime, user.timezone, 'HH:mm', locale)}) · <span className="dash-rest-note">{t('Bây giờ hãy nghỉ ngơi nhé!', 'Time to rest and relax!')}</span>
+              </p>
+            ) : (
+              <p>{t('Không còn lịch trình nào trong ngày. Hãy nghỉ ngơi, nạp lại năng lượng nhé!', 'No more tasks or classes today. Time to relax and recharge!')}</p>
+            )
+          ) : focus ? (
+            <>
+              <p>{formatDate(focus.startTime, user.timezone, 'EEE, dd/MM · HH:mm', locale)}–{formatDate(focus.endTime, user.timezone, 'dd/MM HH:mm', locale)}{!focusCurrent && ` · ${t('còn', 'in')} ${minutes(deltaMinutes, locale)}`}</p>
+              {focus.location && <p><MapPin size={12} />{focus.location}</p>}
+              <small>{itemKind(focus, t)}</small>
+            </>
+          ) : (
+            <p>{t('Mở lịch để xem hoặc thêm lịch cá nhân.', 'Open the calendar to view or add a personal event.')}</p>
+          )}
+        </div>
+        <button className="button button-quiet small-button" onClick={() => navigate('calendar')}>{t('Mở lịch', 'Open calendar')}</button>
       </Panel>
       <Panel className="dash-attention" title={t('Cần chú ý', 'Needs attention')}>
         <button onClick={() => navigate('tasks')}><span>{t('Deadline trong 48 giờ', 'Deadlines within 48 hours')}</span><strong>{metrics.nearDeadlineCount}</strong><ChevronRight size={13} /></button>
