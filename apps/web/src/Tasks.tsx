@@ -54,6 +54,7 @@ export function TasksPage({ now, tasks, stats, historyPage, historyLoading, load
 
 export function TaskForm({ now, task, user, locale, t, save, close }: Context & { task?: Task; save: (body: Record<string, unknown>, id?: string) => Promise<void>; close: () => void }) {
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [duration, setDuration] = useState(String(task?.durationMinutes ?? 60));
+  const [priority, setPriority] = useState<Task['priority']>(task?.priority || 'MEDIUM');
   const submitting = useRef(false), errorBox = useRef<HTMLDivElement>(null);
   useEffect(() => { if (error) errorBox.current?.scrollIntoView({ block: 'nearest' }); }, [error]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -65,30 +66,89 @@ export function TaskForm({ now, task, user, locale, t, save, close }: Context & 
       if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || durationMinutes > 43200) throw new Error(t('Thời lượng phải là số nguyên từ 15 đến 43.200 phút.', 'Duration must be a whole number from 15 to 43,200 minutes.'));
       const deadline = taskDeadlineInput(String(fields.get('deadline')), user.timezone, task);
       if (Date.parse(deadline) <= now) throw new Error(t('Deadline đã qua. Hãy chọn một thời điểm trong tương lai.', 'The deadline has passed. Choose a future time.'));
-      await save({ title, deadline, durationMinutes, priority: fields.get('priority'), location: String(fields.get('location')).trim() || null, notes: String(fields.get('notes')), isSplittable: fields.get('isSplittable') === 'on' }, task?.id);
+      await save({ title, deadline, durationMinutes, priority, location: String(fields.get('location')).trim() || null, notes: String(fields.get('notes')), isSplittable: fields.get('isSplittable') === 'on' }, task?.id);
       close();
     } catch (err) { setError(err instanceof ApiError && err.code === 'UNSCHEDULE_FIRST'
       ? t('Còn phiên học ở trạng thái Đã lên lịch, kể cả phiên đã qua. Máy chủ chưa cho đổi deadline, thời lượng, địa điểm hoặc cách chia phiên. Bạn vẫn có thể sửa tên, ghi chú và ưu tiên.', 'Scheduled sessions remain, including past sessions. The server blocks changes to deadline, duration, location or splitting. Title, notes and priority can still be edited.') : errorMessage(err, locale));
     } finally { submitting.current = false; setBusy(false); }
   };
-  return <Modal drawer className="task-drawer" title={task ? t('Chỉnh sửa công việc', 'Edit task') : t('Thêm công việc', 'Add a task')} subtitle={t('Deadline là hạn hoàn thành; thời lượng là tổng thời gian cần làm.', 'The deadline is the due time; duration is the total estimated work.')} onClose={close} busy={busy}>
-    <form className="task-drawer-form" onSubmit={submit}><div className="task-drawer-body">
+  return <Modal className="task-modal" title={task ? t('Chỉnh sửa công việc', 'Edit task') : t('Thêm công việc mới', 'Add new task')} subtitle={t('Nhập hạn chót và thời lượng để hệ thống tự động tìm khung giờ tự học tối ưu.', 'Set deadline and duration for automated study session planning.')} onClose={close} busy={busy}>
+    <form className="task-form-layout" onSubmit={submit}><div className="task-form-body">
       {error && <div ref={errorBox}><ErrorNotice>{error}</ErrorNotice></div>}
-      <fieldset disabled={busy} className="task-drawer-fields">
-        <Field label={t('Tên công việc', 'Task name')}><input name="title" required maxLength={255} defaultValue={task?.title || ''} placeholder={t('Ví dụ: Hoàn thiện báo cáo học phần', 'e.g. Finish the course report')} /></Field>
-        <Field label="Deadline" hint={user.timezone}><input name="deadline" type="datetime-local" required defaultValue={task ? toInput(task.deadline, user.timezone) : `${shiftDay(localDay(user.timezone, now), 2)}T22:00`} /></Field>
-        <div><Field label={t('Thời lượng dự kiến', 'Estimated duration')} hint={t('Tổng số phút cần để hoàn thành công việc.', 'Total minutes needed to finish the task.')}><input name="durationMinutes" type="number" min={15} max={43200} step={1} required value={duration} onChange={event => setDuration(event.target.value)} /></Field>
-          <div className="task-duration-presets" role="group" aria-label={t('Chọn nhanh thời lượng', 'Duration presets')}>{[[30, t('30 phút', '30 min')], [60, t('1 giờ', '1 hour')], [90, t('1,5 giờ', '1.5 hours')], [120, t('2 giờ', '2 hours')]].map(([value, label]) => <button type="button" key={value} aria-pressed={Number(duration) === value} onClick={() => setDuration(String(value))}>{label}</button>)}</div>
-        </div>
-        <Field label={t('Độ ưu tiên', 'Priority')}><select name="priority" defaultValue={task?.priority || 'MEDIUM'}><option value="HIGH">{t('Cao', 'High')}</option><option value="MEDIUM">{t('Vừa', 'Medium')}</option><option value="LOW">{t('Thấp', 'Low')}</option></select></Field>
-        <Field label={t('Địa điểm học', 'Study location')} hint={t('Không bắt buộc.', 'Optional.')}><input name="location" maxLength={255} defaultValue={task ? task.location ?? '' : user.studyLocation ?? ''} placeholder={t('Ví dụ: Thư viện UED', 'e.g. UED Library')} /></Field>
-        <Field label={t('Ghi chú', 'Notes')} hint={t('Không bắt buộc.', 'Optional.')}><textarea name="notes" rows={3} maxLength={5000} defaultValue={task?.notes || ''} /></Field>
-        <label className="task-split"><input type="checkbox" name="isSplittable" defaultChecked={task?.isSplittable ?? true} /><span><strong>{t('Cho phép chia thành nhiều phiên', 'Allow multiple sessions')}</strong><small>{t('Nếu bật, planner có thể chia tổng thời lượng thành nhiều phiên trước deadline.', 'When enabled, the planner can split the total duration into sessions before the deadline.')}</small></span></label>
-        <p className="task-explanation">{t(`Phiên học tối thiểu theo cài đặt: ${user.minBlockMinutes} phút.`, `Minimum study session from settings: ${user.minBlockMinutes} minutes.`)}</p>
-        {task?.isScheduled && <p className="task-explanation">{t('Công việc đã có lịch. Thay đổi các trường ảnh hưởng phiên học có thể bị máy chủ từ chối; tên, ghi chú và ưu tiên vẫn sửa được.', 'This task has a schedule. The server may reject changes affecting sessions; title, notes and priority can still be edited.')}</p>}
-        <p className="task-explanation">{t('Sau khi tạo công việc, bạn có thể dùng Đề xuất xếp lịch để tìm các phiên tự học phù hợp. Công việc chưa tự chiếm chỗ trên lịch.', 'After creating a task, use Schedule suggestions to find suitable study sessions. The task itself does not reserve calendar time.')}</p>
-      </fieldset>
-    </div><div className="task-drawer-footer"><button type="button" className="button button-quiet" disabled={busy} onClick={close}>{t('Hủy', 'Cancel')}</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? <Spinner /> : <Check size={16} />}{task ? t('Lưu thay đổi', 'Save changes') : t('Tạo công việc', 'Create task')}</button></div></form>
+      <fieldset disabled={busy} className="task-form-fields">
+          <Field label={t('Tên công việc', 'Task name')}>
+            <input name="title" required maxLength={255} defaultValue={task?.title || ''} placeholder={t('Ví dụ: Hoàn thiện báo cáo học phần', 'e.g. Finish the course report')} autoFocus />
+          </Field>
+
+          <div className="task-form-grid">
+            <Field label="Deadline" hint={user.timezone}>
+              <input name="deadline" type="datetime-local" required defaultValue={task ? toInput(task.deadline, user.timezone) : `${shiftDay(localDay(user.timezone, now), 2)}T22:00`} />
+            </Field>
+
+            <div className="field">
+              <span className="task-field-header">
+                <span>{t('Thời lượng dự kiến', 'Estimated duration')}</span>
+                <small className="task-field-hint">{duration} {t('phút', 'min')}</small>
+              </span>
+              <input name="durationMinutes" type="number" min={15} max={43200} step={1} required value={duration} onChange={event => setDuration(event.target.value)} />
+              <div className="task-duration-presets" role="group" aria-label={t('Chọn nhanh thời lượng', 'Duration presets')}>
+                {([[30, t('30 phút', '30 min')], [60, t('1 giờ', '1 hour')], [90, t('1,5 giờ', '1.5 hours')], [120, t('2 giờ', '2 hours')]] as const).map(([value, label]) => (
+                  <button type="button" key={value} className={`duration-pill ${Number(duration) === value ? 'active' : ''}`} aria-pressed={Number(duration) === value} onClick={() => setDuration(String(value))}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="task-form-grid">
+            <div className="field">
+              <span>{t('Độ ưu tiên', 'Priority')}</span>
+              <div className="priority-segmented-group" role="radiogroup" aria-label={t('Độ ưu tiên', 'Priority')}>
+                <button type="button" className={`priority-seg-btn seg-low ${priority === 'LOW' ? 'active' : ''}`} onClick={() => setPriority('LOW')} role="radio" aria-checked={priority === 'LOW'}>
+                  <span className="priority-dot dot-low" /> {t('Thấp', 'Low')}
+                </button>
+                <button type="button" className={`priority-seg-btn seg-medium ${priority === 'MEDIUM' ? 'active' : ''}`} onClick={() => setPriority('MEDIUM')} role="radio" aria-checked={priority === 'MEDIUM'}>
+                  <span className="priority-dot dot-medium" /> {t('Vừa', 'Medium')}
+                </button>
+                <button type="button" className={`priority-seg-btn seg-high ${priority === 'HIGH' ? 'active' : ''}`} onClick={() => setPriority('HIGH')} role="radio" aria-checked={priority === 'HIGH'}>
+                  <span className="priority-dot dot-high" /> {t('Cao', 'High')}
+                </button>
+              </div>
+            </div>
+
+            <Field label={t('Địa điểm học', 'Study location')} hint={t('Tùy chọn', 'Optional')}>
+              <input name="location" maxLength={255} defaultValue={task ? task.location ?? '' : user.studyLocation ?? ''} placeholder={t('Ví dụ: Thư viện UED', 'e.g. UED Library')} />
+            </Field>
+          </div>
+
+          <Field label={t('Ghi chú', 'Notes')} hint={t('Tùy chọn', 'Optional')}>
+            <textarea name="notes" rows={2} maxLength={5000} defaultValue={task?.notes || ''} placeholder={t('Thêm ghi chú, tài liệu ôn tập...', 'Add notes, study materials...')} />
+          </Field>
+
+          <label className="task-split-card">
+            <input type="checkbox" name="isSplittable" defaultChecked={task?.isSplittable ?? true} />
+            <div className="task-split-text">
+              <strong>{t('Cho phép chia thành nhiều phiên', 'Allow multiple sessions')}</strong>
+              <small>{t(`Hệ thống sẽ phân bổ thành các buổi học phù hợp (tối thiểu ${user.minBlockMinutes} phút/phiên) trước deadline.`, `The planner can split total duration into study sessions (min ${user.minBlockMinutes} mins) before the deadline.`)}</small>
+            </div>
+          </label>
+
+          {task?.isScheduled && (
+            <div className="task-alert-callout">
+              <p>{t('Công việc đã có lịch. Thay đổi thời lượng hoặc deadline cần hoàn thành hoặc bỏ lịch các phiên tương lai trước.', 'This task has existing sessions. Unschedule future sessions before changing duration or deadline.')}</p>
+            </div>
+          )}
+        </fieldset>
+      </div>
+      <div className="task-modal-footer">
+        <button type="button" className="button button-quiet" disabled={busy} onClick={close}>{t('Hủy', 'Cancel')}</button>
+        <button type="submit" className="button button-primary" disabled={busy}>
+          {busy ? <Spinner /> : <Check size={16} />}
+          {task ? t('Lưu thay đổi', 'Save changes') : t('Tạo công việc', 'Create task')}
+        </button>
+      </div>
+    </form>
   </Modal>;
 }
 
@@ -102,8 +162,8 @@ export function TaskDetails({ task, now, user, locale, t, close, edit, status, u
   useEffect(() => { if (error) errorBox.current?.scrollIntoView({ block: 'nearest' }); }, [error]);
   const act = async (fn: () => Promise<void>) => { if (submitting.current) return; submitting.current = true; setBusy(true); setError(''); try { await fn(); } catch (err) { setError(errorMessage(err, locale)); } finally { submitting.current = false; setBusy(false); } };
   return <>
-    <Modal drawer className="task-drawer" title={task.title} subtitle={t('Thông tin công việc và các phiên tự học đã xác nhận.', 'Task details and confirmed study sessions.')} onClose={close} busy={busy}>
-      <div className="task-drawer-body task-detail-body">
+    <Modal className="task-modal task-detail-modal" title={task.title} subtitle={t('Thông tin công việc và các phiên tự học đã xác nhận.', 'Task details and confirmed study sessions.')} onClose={close} busy={busy}>
+      <div className="task-form-body task-detail-body">
         {error && <div ref={errorBox}><ErrorNotice>{error}</ErrorNotice></div>}
         <dl className="task-detail-grid"><div><dt>Deadline:</dt><dd className={overdue ? 'tasks-overdue' : ''}>{formatDate(task.deadline, user.timezone, 'dd/MM/yyyy · HH:mm', locale)}{overdue && <small>{t('Quá hạn', 'Overdue')}</small>}</dd></div><div><dt>{t('Thời lượng dự kiến', 'Estimated duration')}</dt><dd>{minutes(task.durationMinutes, locale)}</dd></div><div><dt>{t('Độ ưu tiên', 'Priority')}</dt><dd><PriorityBadge priority={task.priority} t={t} /></dd></div><div><dt>{t('Trạng thái công việc', 'Task status')}</dt><dd>{statusLabel(task, t)}</dd></div></dl>
         <p className="task-detail-context">{user.timezone} · {task.isSplittable ? t('Cho phép chia thành nhiều phiên', 'Multiple sessions allowed') : t('Cần một phiên liên tục', 'One continuous session required')}</p>
@@ -132,7 +192,7 @@ export function TaskDetails({ task, now, user, locale, t, close, edit, status, u
           <button className="button button-danger" disabled={busy} onClick={() => setConfirmAction('cancel')}>{t('Hủy công việc', 'Cancel task')}</button>
         </div></>}
       </div>
-      <div className="task-drawer-footer"><button className="button button-quiet" disabled={busy} onClick={close}>{t('Đóng', 'Close')}</button>{task.status === 'PENDING' && <button className="button button-secondary" disabled={busy} onClick={() => edit(task)}><Pencil size={15} />{t('Sửa công việc', 'Edit task')}</button>}{active ? <button className="button button-primary" disabled={busy} onClick={() => act(() => status(task, 'COMPLETED'))}>{busy ? <Spinner /> : <Check size={16} />}{t('Hoàn thành', 'Complete')}</button> : <button className="button button-primary" disabled={busy} onClick={() => act(() => status(task, 'PENDING'))}>{busy ? <Spinner /> : <RefreshCw size={16} />}{t('Mở lại công việc', 'Reopen task')}</button>}</div>
+      <div className="task-modal-footer"><button className="button button-quiet" disabled={busy} onClick={close}>{t('Đóng', 'Close')}</button>{task.status === 'PENDING' && <button className="button button-secondary" disabled={busy} onClick={() => edit(task)}><Pencil size={15} />{t('Sửa công việc', 'Edit task')}</button>}{active ? <button className="button button-primary" disabled={busy} onClick={() => act(() => status(task, 'COMPLETED'))}>{busy ? <Spinner /> : <Check size={16} />}{t('Hoàn thành', 'Complete')}</button> : <button className="button button-primary" disabled={busy} onClick={() => act(() => status(task, 'PENDING'))}>{busy ? <Spinner /> : <RefreshCw size={16} />}{t('Mở lại công việc', 'Reopen task')}</button>}</div>
     </Modal>
     {confirmAction === 'unschedule' && <ConfirmDialog title={t('Bỏ lịch tương lai', 'Remove future sessions')} message={t('Bỏ các phiên học chưa bắt đầu của công việc này? Các phiên đã bắt đầu vẫn giữ nguyên.', 'Remove future sessions for this task? Sessions already started stay unchanged.')} confirmLabel={t('Bỏ lịch', 'Remove sessions')} cancelLabel={t('Giữ lại', 'Keep')} busy={busy} onConfirm={async () => { setConfirmAction(null); await act(() => unschedule(task)); }} onCancel={() => setConfirmAction(null)} />}
     {confirmAction === 'cancel' && <ConfirmDialog title={t('Hủy công việc', 'Cancel task')} message={t('Hủy công việc và giải phóng thời gian học còn lại?', 'Cancel this task and release its remaining study time?')} confirmLabel={t('Hủy việc', 'Cancel task')} cancelLabel={t('Giữ lại', 'Keep')} danger busy={busy} onConfirm={async () => { setConfirmAction(null); await act(() => status(task, 'CANCELLED')); }} onCancel={() => setConfirmAction(null)} />}
