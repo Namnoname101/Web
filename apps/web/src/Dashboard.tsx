@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, CalendarCheck2, CalendarDays, CheckCheck, ChevronRight, Clock3, GraduationCap, Link2, ListTodo, LockKeyhole, Mail, MapPin, Moon, Plus, Settings2, Sparkles, Sun, Sunrise } from 'lucide-react';
+import { ArrowRight, CalendarCheck2, CalendarDays, Check, CheckCheck, ChevronRight, Clock3, GraduationCap, Link2, ListTodo, LockKeyhole, Mail, MapPin, Moon, Plus, Settings2, Sparkles, Sun, Sunrise, X } from 'lucide-react';
 import { PageHeader, Panel } from './AppShell';
 import { Empty, PriorityBadge, type Translate } from './components';
 import { buildAgendaView, temporalState } from './agenda';
@@ -10,7 +10,7 @@ import { isSuggestionPending } from './suggestions';
 import './dashboard.css';
 
 type Context = { user: User; locale: Locale; t: Translate; now: number };
-type Props = Context & { data: Bootstrap; week: string; loading: boolean; navigate: (view: View) => void; showAgenda: (item: AgendaItem) => void; showTask: (task: Task) => void; newTask: () => void };
+type Props = Context & { data: Bootstrap; week: string; loading: boolean; navigate: (view: View) => void; showAgenda: (item: AgendaItem) => void; showTask: (task: Task) => void; newTask: () => void; connectUed?: () => void };
 type Scope = 'TODAY' | 'UPCOMING' | 'PAST';
 
 function StatCard({ icon, label, value, note }: { icon: ReactNode; label: string; value: string; note: string }) {
@@ -75,7 +75,7 @@ function DeadlineRow({ task, user, locale, t, now, open }: Context & { task: Tas
   return <button className="dash-task-row" onClick={open}><span className="dash-task-check" aria-hidden="true" /><span className="dash-task-copy"><strong>{task.title}</strong><span className={Date.parse(task.deadline) < now ? 'dash-overdue' : ''}>Deadline {formatDate(task.deadline, user.timezone, 'dd/MM · HH:mm', locale)} · {minutes(task.durationMinutes, locale)}{Date.parse(task.deadline) < now && ` · ${t('Quá hạn', 'Overdue')}`}</span><small><CalendarCheck2 size={12} />{task.isScheduled ? t('Đã xếp lịch', 'Scheduled') : t('Chưa xếp đủ lịch', 'Not fully scheduled')}</small></span><PriorityBadge priority={task.priority} t={t} /></button>;
 }
 
-export function Dashboard({ data, user, locale, t, now, week, loading, navigate, showAgenda, showTask, newTask }: Props) {
+export function Dashboard({ data, user, locale, t, now, week, loading, navigate, showAgenda, showTask, newTask, connectUed }: Props) {
   const agenda = useMemo(() => buildAgendaView(data.agendaOverview, data.tasks, now, t('Phiên tự học', 'Study session')), [data.agendaOverview, data.tasks, now, locale]);
   const metrics = useMemo(() => dashboardMetrics(data, now, week, user.timezone), [data, now, week, user.timezone]);
   const pending = useMemo(() => data.suggestions.filter((item: Suggestion) => isSuggestionPending(item, now)), [data.suggestions, now]);
@@ -89,10 +89,105 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
   const openPlanner = () => navigate('suggestions');
   const integrationLabel = (status: string) => ({ CONNECTED: t('Đã kết nối', 'Connected'), REAUTH_REQUIRED: t('Cần xác thực lại', 'Sign in again'), ERROR: t('Cần kiểm tra', 'Needs attention'), DISCONNECTED: t('Chưa kết nối', 'Not connected') })[status] || t('Chưa kết nối', 'Not connected');
 
+  const uedConnected = data.integrations.some(i => i.provider === 'UED' && i.status === 'CONNECTED');
+  const step1Done = uedConnected;
+  const step2Done = data.taskStats.active > 0 || data.taskStats.completed > 0;
+  const step3Done = plans.length > 0 || metrics.scheduledTaskCount > 0;
+  const completedCount = (step1Done ? 1 : 0) + (step2Done ? 1 : 0) + (step3Done ? 1 : 0);
+  const [guideDismissed, setGuideDismissed] = useState(false);
+
   return <div className="dashboard-pilot">
     <PageHeader eyebrow={t('TỔNG QUAN HÔM NAY', 'TODAY AT A GLANCE')} title={title}
       description={`${formatDate(data.agendaOverview.dayStart, user.timezone, 'EEEE, dd/MM/yyyy', locale)} · ${t(`${agenda.today.length} hoạt động, ${data.taskStats.active} việc cần làm.`, `${agenda.today.length} activities, ${data.taskStats.active} active tasks.`)}`}
-      actions={<button className="button button-primary" onClick={openPlanner}><Sparkles size={17} />{t('Gợi ý xếp lịch', 'Plan my time')}</button>} />
+      actions={<div className="dash-actions">
+        <button className="button button-quiet" onClick={newTask}><Plus size={16} />{t('Thêm việc', 'New task')}</button>
+        <button className="button button-primary" onClick={openPlanner}><Sparkles size={16} />{t('Gợi ý xếp lịch', 'Plan my time')}</button>
+      </div>} />
+
+    {(!guideDismissed || completedCount < 3) && (
+      <section className="dash-guide-banner" aria-label={t('Hướng dẫn bắt đầu nhanh', 'Quick start guide')}>
+        <div className="dash-guide-top">
+          <div className="dash-guide-intro">
+            <span className="app-eyebrow"><Sparkles size={13} /> {t('HƯỚNG DẪN 3 BƯỚC BẮT ĐẦU', '3-STEP QUICK START')}</span>
+            <h2>{t('Lập lịch học tự động chỉ với 3 bước', 'Automate your study schedule in 3 steps')}</h2>
+            <p>{t('Lần đầu sử dụng? Hoàn thành các bước dưới đây để hệ thống hiểu thời khóa biểu và tự động tìm khung giờ học tối ưu cho bạn.', 'First time here? Complete these steps so the system knows your timetable and finds optimal study slots.')}</p>
+          </div>
+          <div className="dash-guide-meta">
+            <span className={`dash-guide-badge ${completedCount === 3 ? 'is-all-done' : ''}`}>
+              {completedCount === 3 ? t('✓ Đã hoàn tất 3/3 bước', '✓ All 3 steps completed') : t(`Đã hoàn thành ${completedCount}/3 bước`, `${completedCount}/3 steps completed`)}
+            </span>
+            {completedCount === 3 && (
+              <button className="dash-guide-dismiss" onClick={() => setGuideDismissed(true)} aria-label={t('Thu gọn hướng dẫn', 'Collapse guide')}>
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="dash-guide-cards">
+          <div className={`dash-guide-card ${step1Done ? 'is-complete' : 'is-current'}`}>
+            <div className="dash-guide-card-head">
+              <span className="dash-guide-step-num">{step1Done ? <Check size={16} /> : '1'}</span>
+              <span className="dash-guide-step-tag">{step1Done ? t('Đã xong', 'Done') : t('Bước 1', 'Step 1')}</span>
+            </div>
+            <div className="dash-guide-card-body">
+              <strong>{t('Kết nối thời khóa biểu UED', 'Connect UED timetable')}</strong>
+              <p>{t('Đồng bộ lịch học chính thức từ trường để thuật toán tránh xếp trùng giờ lên lớp.', 'Sync official classes from school portal so the algorithm avoids scheduling conflicts.')}</p>
+            </div>
+            <div className="dash-guide-card-action">
+              {step1Done ? (
+                <span className="dash-guide-status-text"><CheckCheck size={14} /> {t('Đã kết nối UED', 'UED Connected')}</span>
+              ) : (
+                <button className="button button-primary small-button" onClick={connectUed || (() => navigate('integrations'))}>
+                  <GraduationCap size={15} /> {t('Kết nối ngay', 'Connect now')}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className={`dash-guide-card ${step2Done ? 'is-complete' : step1Done ? 'is-current' : ''}`}>
+            <div className="dash-guide-card-head">
+              <span className="dash-guide-step-num">{step2Done ? <Check size={16} /> : '2'}</span>
+              <span className="dash-guide-step-tag">{step2Done ? t('Đã xong', 'Done') : t('Bước 2', 'Step 2')}</span>
+            </div>
+            <div className="dash-guide-card-body">
+              <strong>{t('Thêm bài tập hoặc deadline', 'Add tasks & deadlines')}</strong>
+              <p>{t('Ghi nhận việc cần làm kèm thời lượng dự kiến và hạn nộp để hệ thống phân bổ.', 'Add assignments with estimated duration and deadlines for the system to allocate.')}</p>
+            </div>
+            <div className="dash-guide-card-action">
+              {step2Done ? (
+                <span className="dash-guide-status-text"><CheckCheck size={14} /> {t(`Có ${data.taskStats.active} việc cần làm`, `${data.taskStats.active} active tasks`)}</span>
+              ) : (
+                <button className="button button-primary small-button" onClick={newTask}>
+                  <Plus size={15} /> {t('Thêm việc mới', 'Add task')}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className={`dash-guide-card ${step3Done ? 'is-complete' : (step1Done && step2Done) ? 'is-current' : ''}`}>
+            <div className="dash-guide-card-head">
+              <span className="dash-guide-step-num">{step3Done ? <Check size={16} /> : '3'}</span>
+              <span className="dash-guide-step-tag">{step3Done ? t('Đã xong', 'Done') : t('Bước 3', 'Step 3')}</span>
+            </div>
+            <div className="dash-guide-card-body">
+              <strong>{t('Nhận đề xuất & Xác nhận lịch', 'Review & Apply suggestions')}</strong>
+              <p>{t('Thuật toán tự tìm khung giờ trống đẹp nhất. Bạn duyệt đề xuất để đưa vào lịch.', 'The algorithm finds the best free slots. You approve the proposal to put it on your calendar.')}</p>
+            </div>
+            <div className="dash-guide-card-action">
+              {step3Done ? (
+                <span className="dash-guide-status-text"><CheckCheck size={14} /> {t('Đã có lịch tự học', 'Schedule ready')}</span>
+              ) : (
+                <button className="button button-primary small-button" onClick={openPlanner}>
+                  <Sparkles size={15} /> {t('Tạo đề xuất', 'Plan now')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    )}
+
     <div className="dash-priority-grid">
       <Panel className="dash-next">
         <span className="dash-next-time" aria-hidden="true">{focus ? <><strong>{formatDate(focus.startTime, user.timezone, 'HH:mm', locale)}</strong><small>{formatDate(focus.startTime, user.timezone, 'dd/MM', locale)}</small></> : <CalendarDays size={24} />}</span>
