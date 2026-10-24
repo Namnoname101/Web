@@ -11,7 +11,6 @@ import { ApiError, errorHandler } from './lib/errors.js';
 import { getPrismaClient } from '@personal-schedule/database';
 import { outlookRouter } from './modules/integrations/outlook/outlook.router.js';
 import { uedRouter } from './modules/integrations/ued/ued.routes.js';
-import { syncUed } from './modules/integrations/ued/ued.service.js';
 
 import cookieParser from 'cookie-parser';
 
@@ -113,40 +112,6 @@ app.get('/api/v1/ready', (_req, res, next) => {
 }, readinessLimit, async (_req, res) => {
   await checkDatabaseReadiness();
   res.json({ status: 'ready' });
-});
-app.get('/api/v1/debug-status', async (_req, res) => {
-  const db = getPrismaClient();
-  const integrations = await db.integration.findMany({
-    select: { id: true, provider: true, status: true, lastSyncAt: true, nextSyncAt: true, failures: true, lastError: true, lockedUntil: true, cursor: true }
-  });
-  const events = await db.event.count();
-  const records = await db.academicRecord.count();
-  const users = await db.user.findMany({ select: { id: true, studentId: true, name: true } });
-  res.json({ integrations, events, records, users });
-});
-app.post('/api/v1/debug-sync', async (req, res) => {
-  const db = getPrismaClient();
-  const integration = await db.integration.findFirst({ where: { provider: 'UED' } });
-  if (!integration) return res.json({ error: 'No UED integration found' });
-  const requestedTerm = req.body?.academicYear && req.body?.semester
-    ? { academicYear: String(req.body.academicYear), semester: String(req.body.semester) }
-    : undefined;
-  await db.integration.update({
-    where: { id: integration.id },
-    data: {
-      cursor: requestedTerm ? { uedTermMode: 'SELECTED', uedTerm: requestedTerm } : { uedTermMode: 'CURRENT', uedTerm: null },
-      lastError: null,
-      failures: 0,
-      status: 'CONNECTED',
-      lockedUntil: null
-    }
-  });
-  try {
-    const result = await syncUed(integration.id, requestedTerm);
-    res.json({ success: true, result });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err?.message, code: err?.code, stack: err?.stack });
-  }
 });
 // API responses can contain identities, timetable, tasks and academic records.
 // They must not be retained by a shared browser cache or an intermediary.
