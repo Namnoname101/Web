@@ -27,6 +27,7 @@ describe('startup configuration', () => {
     expect(() => validateEnvironment(valid({ NODE_ENV: 'production' }))).toThrow(/HTTPS/);
     expect(() => validateEnvironment(valid({ NODE_ENV: 'production', WEB_ORIGIN: 'https://planner.example/' }))).toThrow(/WEB_ORIGIN/);
     expect(() => validateEnvironment(valid({ NODE_ENV: 'production', WEB_ORIGIN: 'https://planner.example' }))).not.toThrow();
+    expect(() => validateEnvironment(valid({ NODE_ENV: 'production', WEB_ORIGIN: '', RENDER_EXTERNAL_URL: 'https://planner.onrender.com' }))).not.toThrow();
   });
 
   it('fails closed for partial or consumer Microsoft OAuth configuration', () => {

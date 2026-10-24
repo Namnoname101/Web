@@ -5,7 +5,7 @@ loadEnv({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet:
 export const config = {
   production: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 3000),
-  webOrigin: process.env.WEB_ORIGIN || 'http://localhost:5173',
+  webOrigin: process.env.WEB_ORIGIN || (process.env.RENDER_EXTERNAL_URL ? process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '') : 'http://localhost:5173'),
   demoEnabled: process.env.DEMO_ENABLED === 'true' && process.env.NODE_ENV !== 'production',
   encryptionKey: process.env.ENCRYPTION_KEY || '',
   microsoft: {
@@ -37,7 +37,7 @@ export function validateEnvironment(environment: NodeJS.ProcessEnv): void {
   if (!Number.isInteger(proxyHops) || proxyHops < 0 || proxyHops > 10) throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 10.');
 
   const production = environment.NODE_ENV === 'production';
-  const webOriginValue = environment.WEB_ORIGIN || 'http://localhost:5173';
+  const webOriginValue = environment.WEB_ORIGIN || (environment.RENDER_EXTERNAL_URL ? environment.RENDER_EXTERNAL_URL.replace(/\/$/, '') : 'http://localhost:5173');
   const webOrigin = parsedUrl(webOriginValue, 'WEB_ORIGIN');
   if (webOrigin.username || webOrigin.password || webOrigin.pathname !== '/' || webOrigin.search || webOrigin.hash
     || webOriginValue.endsWith('/')) throw new Error('WEB_ORIGIN must contain only the application origin, without credentials, path, query, hash, or trailing slash.');
