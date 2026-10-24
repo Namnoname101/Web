@@ -6,6 +6,8 @@ services:
     region: singapore
     healthCheckPath: /api/v1/ready
     envVars:
+      - key: PORT
+        value: "3000"
       - key: DATABASE_URL
         fromDatabase:
           name: unirhythm-db

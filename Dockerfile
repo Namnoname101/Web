@@ -22,8 +22,8 @@ COPY scripts ./scripts
 # DATABASE_URL replaces it when the container starts.
 RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build npm run build
 RUN npx playwright install --with-deps chromium && npm cache clean --force
-# The npm wrapper uses project-local scratch space, including during migrations.
-RUN mkdir -p /app/.tmp /app/.npm-cache && chown -R node:node /app/.tmp /app/.npm-cache
+# Grant user node ownership of the app directory so Prisma engines and build outputs are writable
+RUN mkdir -p /app/.tmp /app/.npm-cache && chown -R node:node /app && (chmod -R 755 /ms-playwright 2>/dev/null || true)
 
 ENV NODE_ENV=production \
     PORT=3000 \
