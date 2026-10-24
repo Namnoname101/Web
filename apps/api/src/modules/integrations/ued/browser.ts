@@ -336,7 +336,7 @@ async function selectChoices(page: Page, selector: string, errorCode = 'UED_TERM
     console.warn('UED mapping control unavailable', { errorCode, path: new URL(page.url()).pathname });
     throw new ApiError(502, errorCode);
   };
-  await control.waitFor({ state: 'visible' }).catch(fail);
+  await control.waitFor({ state: 'attached', timeout: 20_000 }).catch(fail);
   if (await control.count() !== 1) await fail();
   const options = await page.locator(`${selector} option`).evaluateAll(elements => elements.map(element => ({
     value: (element as HTMLOptionElement).value, label: (element.textContent || '').replace(/\s+/g, ' ').trim(),
@@ -385,7 +385,15 @@ async function timetableTerm(portal: PortalContext, requested?: UedTerm): Promis
       || await page.locator('#cmb_sr_ds_hoc_ky').inputValue() !== selected.semester) throw new ApiError(502, 'UED_TERM_SELECTION_FAILED');
   }
   // Both views are local display controls on the verified timetable page.
-  if (await page.locator('#cmbkieuin').count()) await page.locator('#cmbkieuin').selectOption('1');
+  if (await page.locator('#cmbkieuin').count()) {
+    await page.evaluate(() => {
+      const el = document.querySelector('#cmbkieuin') as HTMLSelectElement | null;
+      if (el && el.value !== '1') {
+        el.value = '1';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }).catch(() => undefined);
+  }
   return { academicYears, semesters, selected, current };
 }
 
@@ -493,8 +501,15 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
       }
       records.push(...mapUedRows(raw, mapping, adapter.timezone, mapping.termFilter ? termChoices?.selected : undefined));
       if (mapping.termFilter) {
+        currentStep = 'week-ranges';
         if (await portal.page.locator('#cmbkieuin').count()) {
-          await portal.page.locator('#cmbkieuin').selectOption('2').catch(() => undefined);
+          await portal.page.evaluate(() => {
+            const el = document.querySelector('#cmbkieuin') as HTMLSelectElement | null;
+            if (el && el.value !== '2') {
+              el.value = '2';
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }).catch(() => undefined);
           await portal.page.waitForFunction(() => {
             const select = document.querySelector('#cmbtuan') as HTMLSelectElement | null;
             return select && select.options.length > 0;
