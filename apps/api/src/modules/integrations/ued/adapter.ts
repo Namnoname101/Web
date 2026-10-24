@@ -148,7 +148,7 @@ export const verifiedUedDefaults = {
     title: 'Thời khóa biểu', category: 'SCHEDULE',
     readySelector: '#tb_index',
     // The first cell is a th; the other nine are td. Avoid header/summary rows.
-    rowSelector: '#tb_index > tbody > tr:has(> th):has(> td:nth-child(10))',
+    rowSelector: '#tb_index > tbody > tr:has(> td:nth-child(10))',
     idField: 'courseCode', titleField: 'title',
     identityFields: ['courseCode', 'group', 'weekday', 'session', 'periods', 'weeks'],
     termFilter: 'UED_TIMETABLE',

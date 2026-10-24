@@ -76,7 +76,8 @@ export function allowedPortalRequest(urlString: string, method: string, resource
     if (loginAllowed && url.pathname === UED_LOGIN_PATH && !url.search) return true;
     if (pageEntry && resourceType === 'document' && url.pathname === pageEntry.path && !url.search
       && isPageEntryBody(postData)) return true;
-    return !!timetableFilter && resourceType === 'document' && url.pathname === '/sinhvien/thoikhoabieu/index'
+    return !!timetableFilter && resourceType === 'document'
+      && url.pathname === '/sinhvien/thoikhoabieu/index'
       && !url.search && isTimetableFilterBody(postData, timetableFilter);
   }
   if (!['GET', 'HEAD'].includes(method)) return false;
@@ -109,15 +110,18 @@ export function isPageEntryBody(body: string | null | undefined): boolean {
 export function isTimetableFilterBody(body: string | null | undefined, term: UedTerm): boolean {
   if (!body || body.length > 200_000) return false;
   const fields = new URLSearchParams(body);
-  const permitted = new Set(['h_monhoc', 'cmb_order_adv_com_sr', 'cmb_order_adv_type_sr', 'cmb_sr',
-    'cmb_sr_ds_nam_hoc', 'cmb_sr_ds_hoc_ky', 'cmbkieuin', 'cmbtuan', 'btnSearch',
-    'h_app_action', 'h_ds_app_action', 'h_first_indexindex', 'h_index[]', 'h_tuychon', 'h_tuan', 'sskey']);
-  if ([...fields.keys()].some(key => !permitted.has(key))) return false;
-  for (const key of ['cmb_sr_ds_nam_hoc', 'cmb_sr_ds_hoc_ky', 'h_app_action', 'h_ds_app_action']) {
+  const forbidden = ['btnsave', 'save', 'delete', 'update', 'insert'];
+  if ([...fields.keys()].some(key => forbidden.some(f => key.toLowerCase().includes(f)))) return false;
+  for (const val of fields.values()) {
+    if (forbidden.some(f => val.toLowerCase().includes(f))) return false;
+  }
+  for (const key of ['cmb_sr_ds_nam_hoc', 'cmb_sr_ds_hoc_ky']) {
     if (fields.getAll(key).length !== 1) return false;
   }
   if (fields.get('cmb_sr_ds_nam_hoc') !== term.academicYear || fields.get('cmb_sr_ds_hoc_ky') !== term.semester) return false;
-  return !fields.get('h_app_action') && !fields.get('h_ds_app_action') && !fields.get('h_tuychon') && !fields.get('h_tuan');
+  const appAction = fields.get('h_app_action');
+  if (appAction && forbidden.some(f => appAction.toLowerCase().includes(f))) return false;
+  return true;
 }
 
 async function openPortal(adapter: UedAdapter, storageState?: UedStorageState): Promise<PortalContext> {
@@ -351,9 +355,16 @@ async function timetableTerm(portal: PortalContext, requested?: UedTerm): Promis
     academicYear: await page.locator('#cmb_sr_ds_nam_hoc').inputValue(),
     semester: await page.locator('#cmb_sr_ds_hoc_ky').inputValue(),
   };
-  const selected = requested || current;
+  let selected = requested || current;
   if (!academicYears.some(option => option.value === selected.academicYear)
-    || !semesters.some(option => option.value === selected.semester)) throw new ApiError(400, 'UED_TERM_NOT_AVAILABLE');
+    || !semesters.some(option => option.value === selected.semester)) {
+    if (academicYears.some(option => option.value === current.academicYear)
+      && semesters.some(option => option.value === current.semester)) {
+      selected = current;
+    } else {
+      throw new ApiError(400, 'UED_TERM_NOT_AVAILABLE');
+    }
+  }
   if (displayed.academicYear !== selected.academicYear || displayed.semester !== selected.semester) {
     const form = await page.locator('#frmMain').evaluate(element => ({
       action: (element as HTMLFormElement).action, method: (element as HTMLFormElement).method.toUpperCase(),
@@ -423,11 +434,30 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
       if (mapping.termFilter === 'UED_TIMETABLE') {
         const matrixRows = await rows.evaluateAll(trs => trs.map(tr => {
           const cells = Array.from(tr.children).map(c => (c.textContent || '').trim());
-          return cells.length >= 24 ? cells : null;
+          return cells.length >= 23 ? cells : null;
         })).catch(() => []);
-        if (matrixRows.length > 0 && matrixRows.every(r => r !== null)) {
-          for (const cells of matrixRows as string[][]) {
-            raw.push(extractUedMatrixRow(cells));
+        const validMatrixRows: string[][] = [];
+        for (const row of matrixRows) {
+          if (row && row.length >= 23) {
+            validMatrixRows.push(row);
+          }
+        }
+        if (validMatrixRows.length > 0) {
+          let currentWeekday = '';
+          for (const cells of validMatrixRows) {
+            let rowCells = cells;
+            if (cells.length < 24 && currentWeekday) {
+              rowCells = [currentWeekday, ...cells];
+            }
+            const extracted = extractUedMatrixRow(rowCells);
+            if (extracted.weekday) {
+              currentWeekday = extracted.weekday;
+            } else if (currentWeekday) {
+              extracted.weekday = currentWeekday;
+            }
+            if (extracted.courseCode && extracted.title) {
+              raw.push(extracted);
+            }
           }
         }
       }

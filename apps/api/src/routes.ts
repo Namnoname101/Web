@@ -244,7 +244,7 @@ router.patch('/integrations/ued/term', async (req, res) => {
 });
 router.post('/integrations/:provider/sync', mutationLimit, async (req, res) => {
   const provider = z.enum(['UED', 'OUTLOOK']).parse(String(req.params.provider).toUpperCase());
-  const result = await db().integration.updateMany({ where: { userId: req.user!.id, provider, status: 'CONNECTED' }, data: { nextSyncAt: new Date() } });
+  const result = await db().integration.updateMany({ where: { userId: req.user!.id, provider, status: 'CONNECTED' }, data: { nextSyncAt: new Date(), lockedUntil: null, failures: 0, lastError: null } });
   if (!result.count) throw new ApiError(409, 'INTEGRATION_NOT_CONNECTED');
   void workerTick().catch(() => undefined);
   res.status(202).json({ queued: true });

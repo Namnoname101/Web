@@ -131,6 +131,16 @@ app.post('/api/v1/debug-sync', async (req, res) => {
   const requestedTerm = req.body?.academicYear && req.body?.semester
     ? { academicYear: String(req.body.academicYear), semester: String(req.body.semester) }
     : undefined;
+  await db.integration.update({
+    where: { id: integration.id },
+    data: {
+      cursor: requestedTerm ? { uedTermMode: 'SELECTED', uedTerm: requestedTerm } : { uedTermMode: 'CURRENT', uedTerm: null },
+      lastError: null,
+      failures: 0,
+      status: 'CONNECTED',
+      lockedUntil: null
+    }
+  });
   try {
     const result = await syncUed(integration.id, requestedTerm);
     res.json({ success: true, result });
