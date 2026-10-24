@@ -256,7 +256,35 @@ export default function App() {
                 {view === 'tasks' && <TasksPage tasks={data.tasks} stats={data.taskStats} historyPage={data.taskHistoryPage} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} planner={() => navigate('suggestions')} loading={loading} error={error} retry={() => void refresh()} />}
                 {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} tasks={data.tasks} now={now} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} back={() => navigate('calendar')} />}
                 {view === 'notifications' && <NotificationsPage notifications={data.notifications} user={user} locale={locale} t={t} busy={busy} read={id => globalAction(() => mutate(id ? `/notifications/${id}/read` : '/notifications/read-all', 'POST', {}, t('Đã đánh dấu đã đọc.', 'Marked as read.')))} />}
-                {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => { await mutate('/integrations/ued/term', 'PATCH', body, t('Đã đổi học kỳ. Dữ liệu sẽ cập nhật sau khi đồng bộ.', 'Term updated. Records will refresh after syncing.')); }} sync={provider => globalAction(() => mutate(`/integrations/${provider}/sync`, 'POST', {}, t('Đã yêu cầu đồng bộ. Kết quả sẽ tự cập nhật tại đây.', 'Sync requested. Results will update here automatically.')))} disconnect={provider => setDialog({ kind: 'confirm-disconnect', provider })} />}
+                {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => {
+                  setBusy(true);
+                  try {
+                    await api('/integrations/ued/term', 'PATCH', body);
+                    setToast(t('Đang chuyển học kỳ và đồng bộ... Vui lòng đợi trong giây lát.', 'Switching term and syncing... Please wait a moment.'));
+                    for (let i = 0; i < 12; i++) {
+                      await new Promise(r => setTimeout(r, 2000));
+                      await bootstrap();
+                    }
+                  } catch (err) {
+                    setError(errorMessage(err, locale));
+                  } finally {
+                    setBusy(false);
+                  }
+                }} sync={async provider => {
+                  setBusy(true);
+                  try {
+                    await api(`/integrations/${provider}/sync`, 'POST', {});
+                    setToast(t('Đang đồng bộ từ cổng UED... Vui lòng đợi trong giây lát.', 'Syncing from UED portal... Please wait a moment.'));
+                    for (let i = 0; i < 12; i++) {
+                      await new Promise(r => setTimeout(r, 2000));
+                      await bootstrap();
+                    }
+                  } catch (err) {
+                    setError(errorMessage(err, locale));
+                  } finally {
+                    setBusy(false);
+                  }
+                }} disconnect={provider => setDialog({ kind: 'confirm-disconnect', provider })} />}
                 {view === 'settings' && <SettingsPage key={user.id} user={user} locale={locale} t={t} save={async body => { const result = await api<{ user: User }>('/settings', 'PATCH', body); setUser(result.user); chooseLocale(result.user.locale); await bootstrap(); }} />}
               </Suspense>}
           </AppShell>
