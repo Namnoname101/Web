@@ -364,7 +364,7 @@ async function timetableTerm(portal: PortalContext, requested?: UedTerm): Promis
     portal.allowTimetableFilter = selected;
     try {
       await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+        page.waitForNavigation({ waitUntil: 'domcontentloaded' }).catch(() => page.waitForLoadState('domcontentloaded')),
         page.locator('#cmb_s_sr').click(),
       ]);
     } finally { portal.allowTimetableFilter = undefined; }
@@ -395,8 +395,12 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
         const trigger = portal.page.locator(mapping.entry.selector);
         if (await trigger.count() !== 1 || !await trigger.isVisible()) throw new ApiError(502, 'UED_PAGE_ENTRY_FAILED');
         portal.allowPageEntry = { path: mapping.path };
-        try { await Promise.all([portal.page.waitForNavigation({ waitUntil: 'domcontentloaded' }), trigger.click()]); }
-        finally { portal.allowPageEntry = undefined; }
+        try {
+          await Promise.all([
+            portal.page.waitForURL(url => new URL(url).pathname.includes(mapping.path), { waitUntil: 'domcontentloaded', timeout: 35_000 }).catch(() => portal.page.waitForNavigation({ waitUntil: 'domcontentloaded' })),
+            trigger.click(),
+          ]);
+        } finally { portal.allowPageEntry = undefined; }
         const current = new URL(portal.page.url());
         if (current.origin !== UED_ORIGIN || current.pathname !== mapping.path || current.search) throw new ApiError(502, 'UED_PAGE_ENTRY_FAILED');
       } else {
