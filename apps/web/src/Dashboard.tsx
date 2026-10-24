@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, CalendarCheck2, CalendarDays, Check, CheckCheck, ChevronRight, Clock3, GraduationCap, Link2, ListTodo, LockKeyhole, Mail, MapPin, Moon, Plus, Settings2, Sparkles, Sun, Sunrise, X } from 'lucide-react';
+import { ArrowRight, CalendarCheck2, CalendarDays, Check, CheckCheck, ChevronRight, Clock3, GraduationCap, Link2, ListTodo, LockKeyhole, Mail, MapPin, Moon, Plus, Settings2, Sun, Sunrise, X } from 'lucide-react';
 import { PageHeader, Panel } from './AppShell';
 import { Empty, PriorityBadge, type Translate } from './components';
 import { buildAgendaView, temporalState } from './agenda';
@@ -102,14 +102,14 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
       description={`${formatDate(data.agendaOverview.dayStart, user.timezone, 'EEEE, dd/MM/yyyy', locale)} · ${t(`${agenda.today.length} hoạt động, ${data.taskStats.active} việc cần làm.`, `${agenda.today.length} activities, ${data.taskStats.active} active tasks.`)}`}
       actions={<div className="dash-actions">
         <button className="button button-quiet" onClick={newTask}><Plus size={16} />{t('Thêm việc', 'New task')}</button>
-        <button className="button button-primary" onClick={openPlanner}><Sparkles size={16} />{t('Gợi ý xếp lịch', 'Plan my time')}</button>
+        <button className="button button-primary" onClick={openPlanner}><CalendarCheck2 size={16} />{t('Gợi ý xếp lịch', 'Plan my time')}</button>
       </div>} />
 
     {(!guideDismissed || completedCount < 3) && (
       <section className="dash-guide-banner" aria-label={t('Hướng dẫn bắt đầu nhanh', 'Quick start guide')}>
         <div className="dash-guide-top">
           <div className="dash-guide-intro">
-            <span className="app-eyebrow"><Sparkles size={13} /> {t('HƯỚNG DẪN 3 BƯỚC BẮT ĐẦU', '3-STEP QUICK START')}</span>
+            <span className="app-eyebrow"><ListTodo size={13} /> {t('HƯỚNG DẪN 3 BƯỚC BẮT ĐẦU', '3-STEP QUICK START')}</span>
             <h2>{t('Lập lịch học tự động chỉ với 3 bước', 'Automate your study schedule in 3 steps')}</h2>
             <p>{t('Lần đầu sử dụng? Hoàn thành các bước dưới đây để hệ thống hiểu thời khóa biểu và tự động tìm khung giờ học tối ưu cho bạn.', 'First time here? Complete these steps so the system knows your timetable and finds optimal study slots.')}</p>
           </div>
@@ -180,7 +180,7 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
                 <span className="dash-guide-status-text"><CheckCheck size={14} /> {t('Đã có lịch tự học', 'Schedule ready')}</span>
               ) : (
                 <button className="button button-primary small-button" onClick={openPlanner}>
-                  <Sparkles size={15} /> {t('Tạo đề xuất', 'Plan now')}
+                  <CalendarCheck2 size={15} /> {t('Tạo đề xuất', 'Plan now')}
                 </button>
               )}
             </div>
@@ -253,7 +253,7 @@ export function Dashboard({ data, user, locale, t, now, week, loading, navigate,
         {metrics.activeTasks.length ? <div className="dash-task-list">{metrics.activeTasks.slice(0, 4).map((task: Task) => <DeadlineRow key={task.id} task={task} user={user} locale={locale} t={t} now={now} open={() => showTask(task)} />)}<button className="text-link" onClick={() => navigate('tasks')}>{t('Xem công việc', 'View tasks')}<ArrowRight size={14} /></button></div> : <Empty icon={<CheckCheck size={22} />} title={t('Chưa có việc cần làm', 'No active tasks')} description={t('Thêm công việc với deadline và thời lượng để nhận đề xuất.', 'Add a task with a deadline and duration to receive a plan.')} action={<button className="button button-secondary" onClick={newTask}><Plus size={16} />{t('Thêm công việc', 'Add task')}</button>} />}
       </Panel>
     </div><div className="dash-stack">
-      <Panel className="dash-planner"><span className="dash-planner-icon"><Sparkles size={23} /></span><span className="app-eyebrow">{t('ĐỀ XUẤT LỊCH', 'SCHEDULE SUGGESTIONS')}</span><h2>{t(`${plans.length} đề xuất tự học đang chờ xác nhận`, `${plans.length} study plans awaiting confirmation`)}</h2><p>{t('Các phiên đề xuất chưa được thêm vào lịch. Bạn xem lại và xác nhận trước khi áp dụng.', 'Proposed sessions are not on your calendar. Review and confirm before applying.')}</p>{pending.length > plans.length && <p>{t(`${pending.length - plans.length} đề xuất thay đổi lịch khác cần xem.`, `${pending.length - plans.length} other calendar changes to review.`)}</p>}<button className="button button-primary" onClick={openPlanner}>{t('Xem đề xuất', 'Review suggestions')}<ArrowRight size={15} /></button></Panel>
+      <Panel className="dash-planner"><span className="dash-planner-icon"><CalendarCheck2 size={22} /></span><span className="app-eyebrow">{t('ĐỀ XUẤT LỊCH', 'SCHEDULE SUGGESTIONS')}</span><h2>{t(`${plans.length} đề xuất tự học đang chờ xác nhận`, `${plans.length} study plans awaiting confirmation`)}</h2><p>{t('Các phiên đề xuất chưa được thêm vào lịch. Bạn xem lại và xác nhận trước khi áp dụng.', 'Proposed sessions are not on your calendar. Review and confirm before applying.')}</p>{pending.length > plans.length && <p>{t(`${pending.length - plans.length} đề xuất thay đổi lịch khác cần xem.`, `${pending.length - plans.length} other calendar changes to review.`)}</p>}<button className="button button-primary" onClick={openPlanner}>{t('Xem đề xuất', 'Review suggestions')}<ArrowRight size={15} /></button></Panel>
       <Panel title={t('Quy tắc xếp lịch', 'Scheduling rules')} className="dash-rules">
         <dl><div><dt>{t('Có thể xếp tự học', 'Active hours')}</dt><dd>{timeSetting(user.activeStartTime)}–{timeSetting(user.activeEndTime)}</dd></div><div><dt>{t('Giờ nghỉ', 'Break')}</dt><dd>{timeSetting(user.breakStartTime)}–{timeSetting(user.breakEndTime)}</dd></div><div><dt>{t('Di chuyển', 'Travel buffer')}</dt><dd>{user.travelMinutes} {t('phút', 'min')}</dd></div><div><dt>{t('Phiên tối thiểu', 'Minimum session')}</dt><dd>{user.minBlockMinutes} {t('phút', 'min')}</dd></div></dl><p>{user.timezone}</p><button className="button button-quiet" onClick={() => navigate('settings')}><Settings2 size={15} />{t('Mở cài đặt', 'Open settings')}</button>
       </Panel>

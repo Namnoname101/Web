@@ -14,7 +14,7 @@ import {
   MapPin,
   Moon,
   Plus,
-  Sparkles,
+  BookOpen,
   Sun,
   Sunrise,
   CheckCircle2,
@@ -86,7 +86,7 @@ function TimedGridCard({
 
       <div className="cal-chip-title" title={item.title}>
         {item.calendarKind === 'ued' && <LockKeyhole size={11} className="cal-chip-icon" />}
-        {item.calendarKind === 'study' && <Sparkles size={11} className="cal-chip-icon" />}
+        {item.calendarKind === 'study' && <BookOpen size={11} className="cal-chip-icon" />}
         <strong>{item.title}</strong>
       </div>
 
@@ -252,13 +252,13 @@ export function CalendarPage({
         eyebrow={t('LỊCH & THỜI KHÓA BIỂU', 'CALENDAR & TIMETABLE')}
         title={t('Thời khóa biểu & Lịch trình', 'Schedule & Calendar')}
         description={t(
-          'Theo dõi lịch học trường, các buổi tự học AI và deadline công việc trong tuần.',
-          'Track university classes, AI study sessions and task deadlines in real-time.'
+          'Theo dõi lịch học trường, các buổi tự học và deadline công việc trong tuần.',
+          'Track university classes, study sessions and task deadlines in real-time.'
         )}
         actions={
           <>
             <button className="button button-secondary" onClick={openSuggestions}>
-              <Sparkles size={16} />
+              <CalendarCheck2 size={16} />
               {t('Đề xuất xếp lịch', 'Schedule suggestions')}
               {pendingCount > 0 && (
                 <span className="cal-count" aria-label={t(`${pendingCount} đề xuất`, `${pendingCount} suggestions`)}>

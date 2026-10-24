@@ -70,13 +70,13 @@ export function AppShell(props: ShellProps) {
     }}>{t('Đến nội dung chính', 'Skip to content')}</a>
     {mobile && menuOpen && <button className="app-nav-scrim" tabIndex={-1} aria-label={t('Đóng menu', 'Close menu')} onClick={() => setMenuOpen(false)} />}
     <aside id="app-navigation" ref={sidebar} className={`app-sidebar ${menuOpen ? 'is-open' : ''}`} inert={mobile && !menuOpen} aria-hidden={mobile && !menuOpen ? true : undefined} aria-label={t('Menu ứng dụng', 'Application menu')}>
-      <div className="app-brand"><span><CalendarCheck2 size={21} /></span>unirhythm</div>
+      <div className="app-brand"><span className="app-brand-logo"><CalendarCheck2 size={20} /></span><div className="app-brand-text"><strong>UniRhythm</strong><small>UED · ĐH Đà Nẵng</small></div></div>
       <button className="icon-button app-sidebar-close" onClick={() => setMenuOpen(false)} aria-label={t('Đóng menu', 'Close menu')}><X size={20} /></button>
       <span className="app-nav-label">{t('QUẢN LÝ LỊCH', 'SCHEDULE MANAGEMENT')}</span>
       <nav aria-label={t('Điều hướng chính', 'Main navigation')}>
         {nav.map(item => <button key={item.id} className={`app-nav-item ${active === item.id ? 'active' : ''}`} aria-current={active === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.label}</span>{'count' in item && item.count > 0 && <span className="app-nav-count">{item.count > 99 ? '99+' : item.count}</span>}</button>)}
       </nav>
-      <div className="app-profile"><span className="app-avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase() || 'S'}</span><div><strong>{user.name}</strong><small>{user.isDemo ? t('Tài khoản demo', 'Demo account') : t('Sinh viên UED', 'UED student')}</small></div><button className="icon-button" onClick={logout} disabled={busy} aria-label={t('Đăng xuất', 'Sign out')}><LogOut size={17} /></button></div>
+      <div className="app-profile"><span className="app-avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase() || 'S'}</span><div><strong>{user.name}</strong><small>{user.isDemo ? t('Tài khoản mẫu', 'Demo account') : 'MSSV: 3120224021 · 24CNTT3'}</small></div><button className="icon-button" onClick={logout} disabled={busy} aria-label={t('Đăng xuất', 'Sign out')}><LogOut size={16} /></button></div>
     </aside>
     <div className="app-main" inert={mobile && menuOpen}>
       <header className="app-topbar"><div className="app-breadcrumb">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowDownToLine, CalendarCheck2, Check, ChevronRight, Clock3, ListTodo, MapPin, Pencil, Plus, RefreshCw, Search, Sparkles } from 'lucide-react';
+import { ArrowDownToLine, CalendarCheck2, Check, ChevronRight, Clock3, ListTodo, MapPin, Pencil, Plus, RefreshCw, Search } from 'lucide-react';
 import { PageHeader, Panel } from './AppShell';
 import { ConfirmDialog, Empty, ErrorNotice, Field, Modal, PriorityBadge, Spinner, type Translate } from './components';
 import { ApiError, errorMessage, formatDate, localDay, minutes, shiftDay, toInput } from './lib';
@@ -29,7 +29,7 @@ export function TasksPage({ now, tasks, stats, historyPage, historyLoading, load
       <article><h2>{t('Deadline gần', 'Near deadlines')}</h2><strong>{metrics.near}</strong><p>{t('Trong 48 giờ tới', 'Within the next 48 hours')}{metrics.overdue > 0 && <span className="tasks-overdue"> · {metrics.overdue} {t('việc quá hạn', 'overdue tasks')}</span>}</p></article>
       <article><h2>{t('Đã hoàn thành', 'Completed')}</h2><strong>{stats.completed}</strong><p>{t('Tổng toàn bộ lịch sử', 'Across all history')}</p></article>
     </div>
-    <div className="tasks-planner-link"><p><Sparkles size={16} />{t('Công việc chưa tự chiếm chỗ trên lịch. Chỉ phiên tự học đã xác nhận mới được thêm.', 'A task does not reserve calendar time. Only confirmed study sessions are added.')}</p><button className="button button-secondary small-button" onClick={planner}>{t('Đề xuất xếp lịch', 'Schedule suggestions')}<ChevronRight size={14} /></button></div>
+    <div className="tasks-planner-link"><p><CalendarCheck2 size={16} />{t('Công việc chưa tự chiếm chỗ trên lịch. Chỉ phiên tự học đã xác nhận mới được thêm.', 'A task does not reserve calendar time. Only confirmed study sessions are added.')}</p><button className="button button-secondary small-button" onClick={planner}>{t('Đề xuất xếp lịch', 'Schedule suggestions')}<ChevronRight size={14} /></button></div>
     <Panel title={t('Deadline sớm trước', 'Earliest deadlines first')} description={t('Cùng deadline: ưu tiên Cao → Vừa → Thấp.', 'Same deadline: High → Medium → Low priority.')}>
       <div className="tasks-toolbar"><div className="tasks-filters" role="group" aria-label={t('Lọc trạng thái công việc', 'Filter task status')}>
         {([['active', t('Cần làm', 'To do')], ['scheduled', t('Đã xếp lịch', 'Scheduled')], ['COMPLETED', t('Hoàn thành', 'Completed')], ['all', t('Tất cả', 'All')]] as const).map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
@@ -185,7 +185,7 @@ export function TaskDetails({ task, now, user, locale, t, close, edit, status, u
         <section className="task-detail-section"><h3><MapPin size={15} />{t('Địa điểm học', 'Study location')}</h3><p>{task.location || t('Chưa có địa điểm', 'No location')}</p></section>
         <section className="task-detail-section"><h3>{t('Ghi chú', 'Notes')}</h3><p>{task.notes || t('Chưa có ghi chú.', 'No notes.')}</p></section>
         {active && <><p className="task-explanation">{t('Hoàn thành hoặc hủy công việc sẽ giữ phần phiên đã diễn ra và giải phóng thời gian còn lại. Công việc vẫn được giữ trong lịch sử.', 'Completing or cancelling keeps elapsed session time and releases the remaining time. The task stays in history.')}</p><div className="task-detail-actions">
-          <button className="button button-secondary" disabled={busy} onClick={planner}><Sparkles size={15} />{t('Đề xuất xếp lịch', 'Schedule suggestions')}</button>
+          <button className="button button-secondary" disabled={busy} onClick={planner}><CalendarCheck2 size={15} />{t('Đề xuất xếp lịch', 'Schedule suggestions')}</button>
           <p className="task-detail-context">{t('Mở Planner chung; không tự xóa lịch cũ hay chỉ xếp riêng công việc này.', 'Opens the shared planner; it does not remove existing sessions or plan only this task.')}</p>
           <button className="button button-quiet" disabled={busy} onClick={() => act(() => status(task, task.status === 'PENDING' ? 'IN_PROGRESS' : 'PENDING'))}>{task.status === 'PENDING' ? t('Bắt đầu làm', 'Start task') : t('Chuyển về cần làm', 'Move back to to-do')}</button>
           {sessions.result?.hasFutureBlocks && <button className="button button-quiet" disabled={busy || sessions.loading} onClick={() => setConfirmAction('unschedule')}><ArrowDownToLine size={15} />{t('Bỏ lịch tương lai', 'Remove future sessions')}</button>}
