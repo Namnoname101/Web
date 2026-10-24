@@ -74,10 +74,11 @@ export function allowedPortalRequest(urlString: string, method: string, resource
   if (url.origin !== UED_ORIGIN || url.username || url.password) return false;
   if (method === 'POST') {
     if (loginAllowed && url.pathname === UED_LOGIN_PATH && !url.search) return true;
-    if (pageEntry && resourceType === 'document' && url.pathname === pageEntry.path && !url.search
+    if (pageEntry && resourceType === 'document'
+      && [pageEntry.path, `${pageEntry.path}/index`].includes(url.pathname) && !url.search
       && isPageEntryBody(postData)) return true;
     return !!timetableFilter && resourceType === 'document'
-      && url.pathname === '/sinhvien/thoikhoabieu/index'
+      && ['/sinhvien/thoikhoabieu', '/sinhvien/thoikhoabieu/index'].includes(url.pathname)
       && !url.search && isTimetableFilterBody(postData, timetableFilter);
   }
   if (!['GET', 'HEAD'].includes(method)) return false;
@@ -391,8 +392,11 @@ async function timetableTerm(portal: PortalContext, requested?: UedTerm): Promis
 export async function readUedPortal(adapter: UedAdapter, storageState: UedStorageState, expectedStudentId: string,
   requestedTerm?: UedTerm): Promise<{ records: UedRecord[]; storageState: UedStorageState; termChoices?: UedTermChoices; weekRanges?: UedWeekRange[] }> {
   const portal = await openPortal(adapter, storageState);
+  let currentStep = 'init';
   try {
-    await portal.page.goto(trustedUedUrl(adapter.auth.identityPath), { waitUntil: 'domcontentloaded' });
+    currentStep = 'goto-identity';
+    await portal.page.goto(trustedUedUrl(adapter.auth.identityPath), { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    currentStep = 'verify-identity';
     const identity = await verifiedIdentity(portal.page, adapter);
     if (!identity) throw new ApiError(401, 'UED_REAUTH_REQUIRED');
     if (identity.studentId !== expectedStudentId) throw new ApiError(409, 'UED_IDENTITY_MISMATCH');
@@ -401,26 +405,33 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
     let weekRanges: UedWeekRange[] | undefined;
     for (const mapping of adapter.pages) {
       if (mapping.entry) {
-        const entryResponse = await portal.page.goto(trustedUedUrl(mapping.entry.path), { waitUntil: 'domcontentloaded' });
+        currentStep = 'goto-menu-entry';
+        const entryResponse = await portal.page.goto(trustedUedUrl(mapping.entry.path), { waitUntil: 'domcontentloaded', timeout: 45_000 });
         if (!entryResponse?.ok()) throw new ApiError(502, 'UED_PAGE_UNAVAILABLE');
         const trigger = portal.page.locator(mapping.entry.selector);
         if (await trigger.count() !== 1 || !await trigger.isVisible()) throw new ApiError(502, 'UED_PAGE_ENTRY_FAILED');
         portal.allowPageEntry = { path: mapping.path };
+        currentStep = 'click-timetable-entry';
         try {
           await Promise.all([
-            portal.page.waitForURL(url => new URL(url).pathname.includes(mapping.path), { waitUntil: 'domcontentloaded', timeout: 35_000 }).catch(() => portal.page.waitForNavigation({ waitUntil: 'domcontentloaded' })),
+            portal.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => portal.page.waitForLoadState('domcontentloaded')),
             trigger.click(),
           ]);
         } finally { portal.allowPageEntry = undefined; }
         const current = new URL(portal.page.url());
-        if (current.origin !== UED_ORIGIN || current.pathname !== mapping.path || current.search) throw new ApiError(502, 'UED_PAGE_ENTRY_FAILED');
+        if (current.origin !== UED_ORIGIN || !current.pathname.includes(mapping.path)) throw new ApiError(502, 'UED_PAGE_ENTRY_FAILED');
       } else {
-        const response = await portal.page.goto(trustedUedUrl(mapping.path), { waitUntil: 'domcontentloaded' });
+        currentStep = 'goto-direct-page';
+        const response = await portal.page.goto(trustedUedUrl(mapping.path), { waitUntil: 'domcontentloaded', timeout: 45_000 });
         if (!response?.ok()) throw new ApiError(502, 'UED_PAGE_UNAVAILABLE');
       }
       if (await portal.page.locator('#txt_Login_ten_dang_nhap').isVisible()) throw new ApiError(401, 'UED_REAUTH_REQUIRED');
-      if (mapping.termFilter) termChoices = await timetableTerm(portal, requestedTerm);
+      if (mapping.termFilter) {
+        currentStep = 'timetable-term';
+        termChoices = await timetableTerm(portal, requestedTerm);
+      }
       if (mapping.termFilter && await portal.page.getByText(/Không có dữ liệu/i).first().isVisible().catch(() => false)) continue;
+      currentStep = 'wait-ready-table';
       const ready = await portal.page.locator(mapping.readySelector).waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
       if (!ready) {
         if (await portal.page.getByText(/Không có dữ liệu/i).first().isVisible().catch(() => false)) continue;
@@ -498,9 +509,10 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
     }
     return { records, storageState: await portal.context.storageState({ indexedDB: true }), termChoices, weekRanges };
   } catch (error) {
+    console.error('[readUedPortal error at step ' + currentStep + ']:', error);
     if (error instanceof ApiError) throw error;
     if ((error as Error)?.name === 'TimeoutError' || String((error as Error)?.message).includes('Timeout') || String((error as Error)?.message).includes('timeout')) {
-      throw new ApiError(504, 'UED_TIMEOUT');
+      throw new ApiError(504, 'UED_TIMEOUT', '[' + currentStep + '] ' + ((error as Error)?.message || 'Timeout'));
     }
     throw error;
   } finally { await portal.close(); }
