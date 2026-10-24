@@ -36,9 +36,7 @@ function readUedBaselineTerms(cursor: Prisma.JsonObject): Set<string> {
 
 function logUnexpectedUed(stage: 'read' | 'persist', error: unknown) {
   if (error instanceof ApiError) return;
-  // Exception messages from a remote page can contain names, courses, URLs,
-  // selectors, cookies or request data. Log only bounded operational metadata.
-  console.warn('Unexpected UED sync failure', { stage, ...safeErrorSummary(error) });
+  console.warn('Unexpected UED sync failure', { stage, message: (error as Error)?.message, stack: (error as Error)?.stack, ...safeErrorSummary(error) });
 }
 
 function parseUedSecret(value: unknown): UedSecret {

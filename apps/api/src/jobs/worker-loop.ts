@@ -38,7 +38,7 @@ export async function workerTick(): Promise<void> {
         else await syncUed(candidate.id);
       } catch (error) {
         const code = error instanceof ApiError ? error.code : 'SYNC_FAILED';
-        console.warn('Integration sync deferred', { provider: candidate.provider, code });
+        console.warn('Integration sync deferred', { provider: candidate.provider, code, message: (error as Error)?.message, stack: (error as Error)?.stack });
         // Outlook owns its own cursor/backoff. UED errors retry with capped backoff.
         if (candidate.provider === 'UED') await db.integration.updateMany({
           where: { id: candidate.id, leaseToken, status: 'CONNECTED', encryptedSecret: candidate.encryptedSecret },

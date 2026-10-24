@@ -49,7 +49,14 @@ async function closeBrowserContext(context: BrowserContext): Promise<void> {
 async function browser(): Promise<Browser> {
   browserPromise ??= chromium.launch({
     headless: true,
-    args: process.platform === 'linux' ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] : [],
+    args: process.platform === 'linux' ? [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--no-zygote',
+    ] : [],
   }).then(instance => {
     instance.on('disconnected', () => { browserPromise = undefined; });
     return instance;
@@ -123,8 +130,8 @@ async function openPortal(adapter: UedAdapter, storageState?: UedStorageState): 
       locale: 'vi-VN', timezoneId: adapter.timezone, serviceWorkers: 'block',
       acceptDownloads: false,
     });
-    context.setDefaultTimeout(12_000);
-    context.setDefaultNavigationTimeout(25_000);
+    context.setDefaultTimeout(35_000);
+    context.setDefaultNavigationTimeout(60_000);
     const page = await context.newPage();
     const paths = ['/', '/index.php', UED_LOGIN_PATH, ...[adapter.auth.identityPath, ...adapter.auth.landingPaths,
       ...adapter.pages.flatMap(mapping => mapping.termFilter ? [mapping.path, '/sinhvien/thoikhoabieu/index', ...(mapping.entry ? [mapping.entry.path] : [])] : [mapping.path, ...(mapping.entry ? [mapping.entry.path] : [])])].map(path => {
@@ -398,8 +405,13 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
       }
       if (await portal.page.locator('#txt_Login_ten_dang_nhap').isVisible()) throw new ApiError(401, 'UED_REAUTH_REQUIRED');
       if (mapping.termFilter) termChoices = await timetableTerm(portal, requestedTerm);
-      if (mapping.termFilter && await portal.page.getByText('Không có dữ liệu.', { exact: true }).isVisible().catch(() => false)) continue;
-      await portal.page.locator(mapping.readySelector).waitFor({ state: 'visible' });
+      if (mapping.termFilter && await portal.page.getByText(/Không có dữ liệu/i).first().isVisible().catch(() => false)) continue;
+      const ready = await portal.page.locator(mapping.readySelector).waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
+      if (!ready) {
+        if (await portal.page.getByText(/Không có dữ liệu/i).first().isVisible().catch(() => false)) continue;
+        if (await portal.page.locator(mapping.readySelector).count() === 0) continue;
+        throw new ApiError(502, 'UED_PAGE_UNAVAILABLE');
+      }
       const rows = portal.page.locator(mapping.rowSelector);
       const count = await rows.count();
       if (count > 5000) throw new ApiError(502, 'UED_PAGE_TOO_LARGE');
@@ -408,7 +420,7 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
         const matrixRows = await rows.evaluateAll(trs => trs.map(tr => {
           const cells = Array.from(tr.children).map(c => (c.textContent || '').trim());
           return cells.length >= 24 ? cells : null;
-        }));
+        })).catch(() => []);
         if (matrixRows.length > 0 && matrixRows.every(r => r !== null)) {
           for (const cells of matrixRows as string[][]) {
             raw.push(extractUedMatrixRow(cells));
@@ -436,11 +448,27 @@ export async function readUedPortal(adapter: UedAdapter, storageState: UedStorag
       }
       records.push(...mapUedRows(raw, mapping, adapter.timezone, mapping.termFilter ? termChoices?.selected : undefined));
       if (mapping.termFilter) {
-        await portal.page.locator('#cmbkieuin').selectOption('2');
-        weekRanges = mapUedWeekRanges((await selectChoices(portal.page, '#cmbtuan', 'UED_WEEK_OPTIONS_FAILED')).filter(option => option.value));
+        if (await portal.page.locator('#cmbkieuin').count()) {
+          await portal.page.locator('#cmbkieuin').selectOption('2').catch(() => undefined);
+          await portal.page.waitForFunction(() => {
+            const select = document.querySelector('#cmbtuan') as HTMLSelectElement | null;
+            return select && select.options.length > 0;
+          }, { timeout: 10_000 }).catch(() => undefined);
+          try {
+            weekRanges = mapUedWeekRanges((await selectChoices(portal.page, '#cmbtuan', 'UED_WEEK_OPTIONS_FAILED')).filter(option => option.value));
+          } catch (weekErr) {
+            if (raw.length > 0) throw weekErr;
+          }
+        }
       }
     }
     return { records, storageState: await portal.context.storageState({ indexedDB: true }), termChoices, weekRanges };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if ((error as Error)?.name === 'TimeoutError' || String((error as Error)?.message).includes('Timeout') || String((error as Error)?.message).includes('timeout')) {
+      throw new ApiError(504, 'UED_TIMEOUT');
+    }
+    throw error;
   } finally { await portal.close(); }
 }
 
