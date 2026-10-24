@@ -94,6 +94,13 @@ model User {
   notifications    Notification[]
   integrations     Integration[]
   academicRecords  AcademicRecord[]
+  hostedRooms          StudyRoom[]            @relation("HostedRooms")
+  roomParticipations   StudyRoomParticipant[]
+  sentRoomInvites      StudyRoomInvite[]      @relation("SentRoomInvites")
+  roomMessages         RoomChatMessage[]
+  directConversations1 DirectConversation[]   @relation("DirectConversations1")
+  directConversations2 DirectConversation[]   @relation("DirectConversations2")
+  directMessages       DirectChatMessage[]
 
   @@map("users")
 }
@@ -286,4 +293,113 @@ model AcademicRecord {
   @@unique([userId, category, externalId])
   @@index([userId, syncedAt(sort: Desc)], map: "ix_academic_records_user_synced")
   @@map("academic_records")
+}
+
+enum RoomPomodoroState {
+  IDLE
+  FOCUS
+  BREAK
+
+  @@map("room_pomodoro_state_enum")
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+
+  @@map("invite_status_enum")
+}
+
+model StudyRoom {
+  id              String                 @id @default(uuid()) @db.Uuid
+  title           String                 @db.VarChar(120)
+  description     String?                @db.VarChar(255)
+  passcode        String?                @db.VarChar(32)
+  maxParticipants Int                    @default(6) @map("max_participants")
+  isClosed        Boolean                @default(false) @map("is_closed")
+  hostId          String                 @map("host_id") @db.Uuid
+  host            User                   @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+  pomodoroState   RoomPomodoroState      @default(IDLE) @map("pomodoro_state")
+  focusMinutes    Int                    @default(25) @map("focus_minutes")
+  breakMinutes    Int                    @default(5) @map("break_minutes")
+  timerEndsAt     DateTime?              @map("timer_ends_at") @db.Timestamptz(6)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  participants    StudyRoomParticipant[]
+  invites         StudyRoomInvite[]
+  messages        RoomChatMessage[]
+
+  @@map("study_rooms")
+}
+
+model StudyRoomParticipant {
+  id          String    @id @default(uuid()) @db.Uuid
+  roomId      String    @map("room_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  currentTask String?   @map("current_task") @db.VarChar(120)
+  isCamOn     Boolean   @default(false) @map("is_cam_on")
+  isMicOn     Boolean   @default(false) @map("is_mic_on")
+  joinedAt    DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  room        StudyRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("study_room_participants")
+}
+
+model StudyRoomInvite {
+  id              String       @id @default(uuid()) @db.Uuid
+  roomId          String       @map("room_id") @db.Uuid
+  invitedByUserId String       @map("invited_by_user_id") @db.Uuid
+  targetStudentId String       @map("target_student_id") @db.VarChar(64)
+  status          InviteStatus @default(PENDING)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  room            StudyRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inviter         User         @relation("SentRoomInvites", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetStudentId, status])
+  @@map("study_room_invites")
+}
+
+model RoomChatMessage {
+  id        String    @id @default(uuid()) @db.Uuid
+  roomId    String    @map("room_id") @db.Uuid
+  senderId  String    @map("sender_id") @db.Uuid
+  content   String    @db.VarChar(1000)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  room      StudyRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@map("room_chat_messages")
+}
+
+model DirectConversation {
+  id        String              @id @default(uuid()) @db.Uuid
+  user1Id   String              @map("user1_id") @db.Uuid
+  user2Id   String              @map("user2_id") @db.Uuid
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user1     User                @relation("DirectConversations1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User                @relation("DirectConversations2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages  DirectChatMessage[]
+
+  @@unique([user1Id, user2Id])
+  @@map("direct_conversations")
+}
+
+model DirectChatMessage {
+  id             String             @id @default(uuid()) @db.Uuid
+  conversationId String             @map("conversation_id") @db.Uuid
+  senderId       String             @map("sender_id") @db.Uuid
+  content        String             @db.VarChar(2000)
+  isRead         Boolean            @default(false) @map("is_read")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("direct_chat_messages")
 }
