@@ -11,6 +11,7 @@ import { ApiError, errorHandler } from './lib/errors.js';
 import { getPrismaClient } from '@personal-schedule/database';
 import { outlookRouter } from './modules/integrations/outlook/outlook.router.js';
 import { uedRouter } from './modules/integrations/ued/ued.routes.js';
+import { studyRoomsRouter } from './modules/study-rooms/study-rooms.routes.js';
 
 import cookieParser from 'cookie-parser';
 
@@ -118,7 +119,7 @@ app.get('/api/v1/ready', (_req, res, next) => {
 app.use('/api/v1', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 app.use('/api/v1', rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/v1', protectMutations, attachSession);
-app.use('/api/v1', outlookRouter, uedRouter);
+app.use('/api/v1', outlookRouter, uedRouter, studyRoomsRouter);
 app.use('/api/v1', router);
 app.use('/api', (_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND' } }));
 const webDist = fileURLToPath(new URL('../../web/dist/', import.meta.url));
