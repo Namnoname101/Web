@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" />
 </p>
 
-# unirhy**thm**
+# Sched**UED**
 
 Ứng dụng quản lý lịch học cá nhân dành cho sinh viên UED. Tự động kéo thời khóa biểu từ cổng thông tin trường về, rồi xếp lịch học/làm bài xung quanh những buổi học đó. Mọi thứ planner gợi ý — bạn chọn chấp nhận hay bỏ qua.
 
