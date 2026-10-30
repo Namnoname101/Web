@@ -1,5 +1,5 @@
 export type Locale = 'vi' | 'en';
-export type View = 'dashboard' | 'calendar' | 'tasks' | 'suggestions' | 'notifications' | 'integrations' | 'settings';
+export type View = 'dashboard' | 'calendar' | 'tasks' | 'suggestions' | 'notifications' | 'integrations' | 'settings' | 'chat' | 'study-rooms';
 export interface User {
   id: string; name: string; email: string; studentId?: string | null;
   locale: Locale; timezone: string; isDemo: boolean;
@@ -48,3 +48,82 @@ export interface TaskBlocksResponse { blocks: ScheduleBlock[]; hasFutureBlocks: 
 export interface TaskHistoryResponse { tasks: Task[]; page: Pick<TaskHistoryPage, 'hasMore' | 'nextCursor'> }
 export interface AuthConfig { demoEnabled: boolean; microsoftEnabled: boolean; uedEnabled: boolean }
 export interface AgendaItem { id: string; title: string; startTime: string; endTime: string; location: string | null; kind: 'CLASS' | 'PERSONAL' | 'DEADLINE' | 'TASK'; event?: CalendarEvent; task?: Task; block?: ScheduleBlock }
+
+export interface StudentPublicProfile {
+  id: string;
+  name: string;
+  email: string;
+  studentId: string | null;
+}
+
+export interface DirectChatMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+  sender?: {
+    id: string;
+    name: string;
+    studentId: string | null;
+  };
+}
+
+export interface ConversationSummary {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  otherUser: StudentPublicProfile;
+  lastMessage: {
+    id: string;
+    content: string;
+    senderId: string;
+    createdAt: string;
+    isRead: boolean;
+  } | null;
+}
+
+export interface StudyRoomSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  hasPasscode: boolean;
+  maxParticipants: number;
+  participantCount: number;
+  host: {
+    id: string;
+    name: string;
+    studentId: string | null;
+  };
+  pomodoroState: 'IDLE' | 'FOCUS' | 'BREAK';
+  focusMinutes: number;
+  breakMinutes: number;
+  timerEndsAt: string | null;
+  participants: {
+    userId: string;
+    name: string;
+    studentId: string | null;
+    currentTask: string | null;
+    isCamOn: boolean;
+    isMicOn: boolean;
+  }[];
+}
+
+export interface StudyRoomInvite {
+  id: string;
+  roomId: string;
+  targetStudentId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  createdAt: string;
+  room: {
+    id: string;
+    title: string;
+    description: string | null;
+  };
+  inviter: {
+    id: string;
+    name: string;
+    studentId: string | null;
+  };
+}

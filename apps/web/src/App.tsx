@@ -19,6 +19,8 @@ const NotificationsPage = lazy(() => import('./pages').then(m => ({ default: m.N
 const SettingsPage = lazy(() => import('./pages').then(m => ({ default: m.SettingsPage })));
 const Dashboard = lazy(() => import('./Dashboard').then(m => ({ default: m.Dashboard })));
 const UedConnect = lazy(() => import('./UedConnect'));
+const ChatHub = lazy(() => import('./ChatHub').then(m => ({ default: m.ChatHub })));
+const StudyRoomsPage = lazy(() => import('./StudyRooms').then(m => ({ default: m.StudyRoomsPage })));
 import { api, ApiError, calendarRollover, dayStart, errorMessage, localDay, monday, shiftDay } from './lib';
 import { isSuggestionPending } from './suggestions';
 import { ServerClock } from './server-clock';
@@ -26,7 +28,7 @@ import { appendUniqueTasks, preserveExpandedHistory } from './task-history';
 import type { AgendaItem, AuthConfig, Bootstrap, CalendarEvent, Locale, Suggestion, Task, TaskHistoryResponse, User, View } from './types';
 
 type Dialog = { kind: 'task'; task?: Task } | { kind: 'event'; event?: CalendarEvent } | { kind: 'task-detail'; task: Task } | { kind: 'event-detail'; event: CalendarEvent } | { kind: 'proposal'; suggestion: Suggestion } | { kind: 'plan' } | { kind: 'ued' } | { kind: 'confirm-disconnect'; provider: string } | null;
-const validViews: View[] = ['dashboard', 'calendar', 'tasks', 'suggestions', 'notifications', 'integrations', 'settings'];
+const validViews: View[] = ['dashboard', 'calendar', 'tasks', 'suggestions', 'notifications', 'integrations', 'settings', 'chat', 'study-rooms'];
 const readLocale = (): Locale => { try { return localStorage.getItem('schedule-locale') === 'en' ? 'en' : 'vi'; } catch { return 'vi'; } };
 const readView = (): View => { const hash = location.hash.slice(1); if (hash === 'calendar/suggestions') return 'suggestions'; const value = hash as View; return validViews.includes(value) ? value : 'dashboard'; };
 export { isSuggestionPending as isPending } from './suggestions';
@@ -236,6 +238,8 @@ export default function App() {
     dashboard: [t('Tổng quan', 'Dashboard'), ''],
     calendar: [t('Lịch của tôi', 'Calendar'), t('Lớp học, lịch cá nhân và các phiên tự học đã xác nhận.', 'Classes, personal events and confirmed study sessions.')],
     tasks: [t('Công việc', 'Tasks'), t('Quản lý deadline, thời lượng và tiến độ công việc.', 'Manage task deadlines, duration and progress.')],
+    chat: [t('Tin nhắn sinh viên', 'Student Messages'), t('Trò chuyện và kết nối trực tiếp với các bạn sinh viên UED.', 'Direct messages and collaboration with UED students.')],
+    'study-rooms': [t('Phòng học trực tuyến', 'Focus Study Rooms'), t('Phòng tự học tập trung Pomodoro cùng bạn bè.', 'Group focus study rooms with Pomodoro timer.')],
     suggestions: [t('Đề xuất xếp lịch', 'Schedule suggestions'), t('Xem và xác nhận trước khi thay đổi lịch.', 'Review and confirm before changing your calendar.')],
     notifications: [t('Thông báo', 'Notifications'), t('Cập nhật đồng bộ, đề xuất và nhắc việc.', 'Sync updates, suggestions and reminders.')],
     integrations: [t('Kết nối dữ liệu', 'Data connections'), t('UED là nguồn lịch học chính. Outlook là kết nối tùy chọn.', 'UED is the primary timetable source. Outlook is optional.')],
@@ -248,12 +252,14 @@ export default function App() {
           <AppShell user={user} locale={locale} t={t} view={view} now={now} unread={unread}
             loading={loading} busy={busy} menuOpen={menu} setMenuOpen={setMenu} navigate={navigate}
             refresh={() => void refresh()} logout={() => void logout()} chooseLocale={chooseLocale}>
-              {!['dashboard', 'calendar', 'suggestions', 'tasks'].includes(view) && <PageHeader title={titles[view][0]} description={titles[view][1]} />}
+              {!['dashboard', 'calendar', 'suggestions', 'tasks', 'chat', 'study-rooms'].includes(view) && <PageHeader title={titles[view][0]} description={titles[view][1]} />}
               {error && <div className="global-error"><ErrorNotice>{error}</ErrorNotice><button className="icon-button" onClick={() => setError('')} aria-label={t('Ẩn lỗi', 'Dismiss error')}><X size={16} /></button></div>}
               {!data ? <section className="panel loading-panel"><Spinner /><p>{t('Đang tải lịch và công việc của bạn…', 'Loading your calendar and tasks…')}</p>{!loading && <button className="button button-secondary" onClick={refresh}>{t('Thử lại', 'Try again')}</button>}</section> : <Suspense fallback={<section className="panel loading-panel"><Spinner /><p>{t('Đang tải…', 'Loading…')}</p></section>}>
                 {view === 'dashboard' && <Dashboard data={data} user={user} locale={locale} t={t} navigate={navigate} showAgenda={showAgenda} showTask={showTask} newTask={() => setDialog({ kind: 'task' })} connectUed={() => setDialog({ kind: 'ued' })} now={now} week={week} loading={loading} />}
                 {view === 'calendar' && <CalendarPage data={data} user={user} locale={locale} t={t} days={days} week={week} setWeek={setWeek} selectedDay={selectedDay} setSelectedDay={setSelectedDay} addEvent={day => { setSelectedDay(day); setDialog({ kind: 'event' }); }} showEvent={event => setDialog({ kind: 'event-detail', event })} showTask={showTask} openSuggestions={() => navigate('suggestions')} pendingCount={waiting.length} loading={loading} rangeReady={loadedWeek === week} error={error} retry={() => void refresh()} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} />}
                 {view === 'tasks' && <TasksPage tasks={data.tasks} stats={data.taskStats} historyPage={data.taskHistoryPage} historyLoading={taskHistoryLoading} loadMoreHistory={loadMoreTaskHistory} now={now} user={user} locale={locale} t={t} open={showTask} create={() => setDialog({ kind: 'task' })} planner={() => navigate('suggestions')} loading={loading} error={error} retry={() => void refresh()} />}
+                {view === 'chat' && <ChatHub user={user} locale={locale} t={t} />}
+                {view === 'study-rooms' && <StudyRoomsPage user={user} locale={locale} t={t} />}
                 {view === 'suggestions' && <SuggestionsPage suggestions={data.suggestions} tasks={data.tasks} now={now} user={user} locale={locale} t={t} open={suggestion => setDialog({ kind: 'proposal', suggestion })} create={() => setDialog({ kind: 'plan' })} back={() => navigate('calendar')} />}
                 {view === 'notifications' && <NotificationsPage notifications={data.notifications} user={user} locale={locale} t={t} busy={busy} read={id => globalAction(() => mutate(id ? `/notifications/${id}/read` : '/notifications/read-all', 'POST', {}, t('Đã đánh dấu đã đọc.', 'Marked as read.')))} />}
                 {view === 'integrations' && <IntegrationsPage integrations={data.integrations} records={data.academicRecords} config={config} user={user} locale={locale} t={t} busy={busy} connectUed={() => setDialog({ kind: 'ued' })} saveTerm={async body => {

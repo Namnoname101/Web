@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bell, CalendarCheck2, CalendarDays, ChevronRight, LayoutDashboard, Link2, ListTodo, LogOut, Menu, RefreshCw, Settings2, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronRight, LayoutDashboard, Link2, ListTodo, LogOut, Menu, MessageSquare, RefreshCw, Settings2, Users, X } from 'lucide-react';
+import { SchedUedIcon } from './Logo';
 import { formatDate } from './lib';
 import type { Translate } from './components';
 import type { Locale, User, View } from './types';
@@ -34,6 +35,8 @@ export function AppShell(props: ShellProps) {
     { id: 'dashboard', label: t('Tổng quan', 'Dashboard'), icon: LayoutDashboard },
     { id: 'calendar', label: t('Lịch của tôi', 'Calendar'), icon: CalendarDays },
     { id: 'tasks', label: t('Công việc', 'Tasks'), icon: ListTodo },
+    { id: 'chat', label: t('Tin nhắn', 'Messages'), icon: MessageSquare },
+    { id: 'study-rooms', label: t('Phòng học', 'Study Rooms'), icon: Users },
     { id: 'notifications', label: t('Thông báo', 'Notifications'), icon: Bell, count: unread },
     { id: 'integrations', label: t('Kết nối dữ liệu', 'Data connections'), icon: Link2 },
     { id: 'settings', label: t('Cài đặt', 'Settings'), icon: Settings2 },
@@ -70,13 +73,13 @@ export function AppShell(props: ShellProps) {
     }}>{t('Đến nội dung chính', 'Skip to content')}</a>
     {mobile && menuOpen && <button className="app-nav-scrim" tabIndex={-1} aria-label={t('Đóng menu', 'Close menu')} onClick={() => setMenuOpen(false)} />}
     <aside id="app-navigation" ref={sidebar} className={`app-sidebar ${menuOpen ? 'is-open' : ''}`} inert={mobile && !menuOpen} aria-hidden={mobile && !menuOpen ? true : undefined} aria-label={t('Menu ứng dụng', 'Application menu')}>
-      <div className="app-brand"><span className="app-brand-logo"><CalendarCheck2 size={20} /></span><div className="app-brand-text"><strong>UniRhythm</strong><small>UED · ĐH Đà Nẵng</small></div></div>
+      <div className="app-brand"><span className="app-brand-logo"><SchedUedIcon size={20} /></span><div className="app-brand-text"><strong>SchedUED</strong><small>UED · ĐH Đà Nẵng</small></div></div>
       <button className="icon-button app-sidebar-close" onClick={() => setMenuOpen(false)} aria-label={t('Đóng menu', 'Close menu')}><X size={20} /></button>
       <span className="app-nav-label">{t('QUẢN LÝ LỊCH', 'SCHEDULE MANAGEMENT')}</span>
       <nav aria-label={t('Điều hướng chính', 'Main navigation')}>
-        {nav.map(item => <button key={item.id} className={`app-nav-item ${active === item.id ? 'active' : ''}`} aria-current={active === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.label}</span>{'count' in item && item.count > 0 && <span className="app-nav-count">{item.count > 99 ? '99+' : item.count}</span>}</button>)}
+        {nav.map(item => <button key={item.id} className={`app-nav-item ${active === item.id ? 'active' : ''}`} aria-current={active === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.label}</span>{'count' in item && typeof item.count === 'number' && item.count > 0 && <span className="app-nav-count">{item.count > 99 ? '99+' : item.count}</span>}</button>)}
       </nav>
-      <div className="app-profile"><span className="app-avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase() || 'S'}</span><div><strong>{user.name}</strong><small>{user.isDemo ? t('Tài khoản mẫu', 'Demo account') : 'MSSV: 3120224021 · 24CNTT3'}</small></div><button className="icon-button" onClick={logout} disabled={busy} aria-label={t('Đăng xuất', 'Sign out')}><LogOut size={16} /></button></div>
+      <div className="app-profile"><span className="app-avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase() || 'S'}</span><div><strong>{user.name}</strong><small>{user.isDemo ? t('Tài khoản mẫu', 'Demo account') : (user.studentId ? `MSSV: ${user.studentId}` : 'Sinh viên UED')}</small></div><button className="icon-button" onClick={logout} disabled={busy} aria-label={t('Đăng xuất', 'Sign out')}><LogOut size={16} /></button></div>
     </aside>
     <div className="app-main" inert={mobile && menuOpen}>
       <header className="app-topbar"><div className="app-breadcrumb">
@@ -91,7 +94,7 @@ export function AppShell(props: ShellProps) {
       <main id="main-content" className="app-content" tabIndex={-1}>
         {user.isDemo && <div className="app-demo-note"><span>DEMO</span>{t('Dữ liệu minh họa — chưa kết nối tài khoản trường.', 'Sample data — not connected to a school account.')}</div>}
         {children}
-        <footer className="app-footer">unirhythm <span>·</span> {t('Lịch học và công việc sinh viên', 'Student schedule and tasks')}</footer>
+        <footer className="app-footer">SchedUED <span>·</span> {t('Lịch học và công việc sinh viên', 'Student schedule and tasks')}</footer>
       </main>
     </div>
   </div>;
