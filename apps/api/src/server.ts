@@ -4,6 +4,7 @@ import { getPrismaClient } from '@personal-schedule/database';
 import { startWorkerLoop } from './jobs/worker-loop.js';
 import { shutdownUed } from './modules/integrations/ued/browser.js';
 import { createHttpDrainStep, createShutdownCoordinator } from './lib/graceful-shutdown.js';
+import { setupWebSocketServer } from './modules/realtime/websocket.server.js';
 
 assertConfig();
 const port = config.port;
@@ -13,11 +14,14 @@ const server = app.listen(port, () => {
   console.info(`API listening on http://localhost:${port}`);
 });
 
+const wss = setupWebSocketServer(server);
+
 const shutdown = createShutdownCoordinator({
   label: 'API server',
   phases: [
     [
       { name: 'http', run: createHttpDrainStep(server) },
+      { name: 'websocket', run: async () => { wss.close(); } },
       { name: 'worker', run: stopWorker },
     ],
     [{ name: 'ued-browser', run: shutdownUed }],
