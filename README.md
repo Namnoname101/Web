@@ -81,6 +81,12 @@ Tất cả test dùng database `_test` riêng, không đụng dữ liệu thật
 
 Chi tiết: [`docs/PROGRESS.md`](docs/PROGRESS.md) · API contract: [`docs/API.md`](docs/API.md)
 
+## Quy trình nhóm & Đóng góp
+
+Dự án áp dụng quy chuẩn làm việc theo mô hình Agile/Scrum trên GitHub:
+- Quy định đặt tên nhánh, commit chuẩn và quy trình Code Review: xem tại [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Quản lý tiến độ và phân công nhiệm vụ: theo dõi tại GitHub Issues & GitHub Projects.
+
 ## Deploy
 
 React và Express được phát hành cùng một HTTPS origin trong container. Không
