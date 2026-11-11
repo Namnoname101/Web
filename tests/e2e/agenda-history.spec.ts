@@ -116,7 +116,7 @@ test('six main navigation items keep planner review nested under Calendar includ
   await page.goto('/');
   await page.getByRole('button', { name: 'Khám phá bản demo' }).click();
   const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
-  await expect(nav.getByRole('button')).toHaveCount(6);
+  await expect(nav.getByRole('button')).toHaveCount(8);
   await expect(nav.getByRole('button', { name: /Đề xuất|Suggestions/ })).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'Hôm nay 0', exact: true })).toBeVisible();
   await expect(page.locator('.dash-today').getByText('Chưa có lịch', { exact: true })).toHaveCount(3);

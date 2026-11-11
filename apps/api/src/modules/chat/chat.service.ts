@@ -77,16 +77,35 @@ export async function getOrCreateConversation(user1Id: string, user2Id: string) 
   });
 
   if (!conversation) {
-    conversation = await db().directConversation.create({
-      data: {
-        user1Id: u1,
-        user2Id: u2,
-      },
-      include: {
-        user1: { select: { id: true, name: true, email: true, studentId: true } },
-        user2: { select: { id: true, name: true, email: true, studentId: true } },
-      },
-    });
+    try {
+      conversation = await db().directConversation.create({
+        data: {
+          user1Id: u1,
+          user2Id: u2,
+        },
+        include: {
+          user1: { select: { id: true, name: true, email: true, studentId: true } },
+          user2: { select: { id: true, name: true, email: true, studentId: true } },
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        conversation = await db().directConversation.findUniqueOrThrow({
+          where: {
+            user1Id_user2Id: {
+              user1Id: u1,
+              user2Id: u2,
+            },
+          },
+          include: {
+            user1: { select: { id: true, name: true, email: true, studentId: true } },
+            user2: { select: { id: true, name: true, email: true, studentId: true } },
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   return conversation;

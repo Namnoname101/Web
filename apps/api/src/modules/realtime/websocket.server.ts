@@ -2,6 +2,7 @@ import type { Server as HttpServer, IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { getPrismaClient } from '@personal-schedule/database';
 import { hash } from '../../lib/crypto.js';
+import { config } from '../../config.js';
 import { SESSION_COOKIE } from '../auth/session.js';
 import { globalRoomHub, type Peer } from './room-hub.js';
 import { joinStudyRoom, leaveStudyRoom } from '../study-rooms/study-rooms.service.js';
@@ -25,6 +26,14 @@ export function setupWebSocketServer(httpServer: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', async (req: IncomingMessage, socket, head) => {
+    // Prevent Cross-Site WebSocket Hijacking (CSWSH)
+    const origin = req.headers.origin;
+    if (origin ? origin !== config.webOrigin : config.production) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     // Only accept connections on /ws or /api/v1/ws
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname !== '/ws' && url.pathname !== '/api/v1/ws') {
@@ -150,10 +159,11 @@ export function setupWebSocketServer(httpServer: HttpServer): WebSocketServer {
           case 'task:update': {
             const { roomId, currentTask } = payload;
             if (roomId && typeof currentTask === 'string') {
-              globalRoomHub.updateTask(roomId, user.id, currentTask);
+              const sanitizedTask = currentTask.trim().slice(0, 120);
+              globalRoomHub.updateTask(roomId, user.id, sanitizedTask);
               await getPrismaClient().studyRoomParticipant.updateMany({
                 where: { roomId, userId: user.id },
-                data: { currentTask },
+                data: { currentTask: sanitizedTask },
               });
             }
             break;
@@ -161,8 +171,19 @@ export function setupWebSocketServer(httpServer: HttpServer): WebSocketServer {
 
           case 'chat:room_send': {
             const { roomId, content } = payload;
-            const trimmed = (content || '').trim();
+            const trimmed = (content || '').trim().slice(0, 1000);
             if (roomId && trimmed) {
+              const isMember = await getPrismaClient().studyRoomParticipant.findUnique({
+                where: { roomId_userId: { roomId, userId: user.id } },
+              });
+              if (!isMember) {
+                ws.send(JSON.stringify({
+                  event: 'room:error',
+                  payload: { message: 'Bạn chưa tham gia phòng học này.' },
+                }));
+                break;
+              }
+
               const msg = await getPrismaClient().roomChatMessage.create({
                 data: {
                   roomId,

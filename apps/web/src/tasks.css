@@ -361,7 +361,7 @@
   .tasks-summary strong { font-size: 24px; margin: 5px 0; }
   .tasks-toolbar { padding: 14px; }
   .tasks-filters { width: 100%; }
-  .tasks-filters button { flex: 1; padding: 8px 5px; font-size: 11px; }
+  .tasks-filters button { flex: 1; padding: 8px 5px; font-size: 11px; min-height: 44px; }
   .tasks-list { padding-inline: 16px; }
   .tasks-row { gap: 8px; flex-wrap: wrap; }
   .tasks-copy { flex-basis: calc(100% - 30px); }

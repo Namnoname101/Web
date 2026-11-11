@@ -420,7 +420,8 @@ export function CalendarPage({
         </aside>
 
         {/* Right Main Calendar Board */}
-        <main className="cal-main-board app-panel">
+        <section role="region" aria-label={t('Lịch tuần', 'Weekly calendar')} className="cal-main-board app-panel">
+          <h1 className="sr-only">{t('Lịch tuần', 'Weekly calendar')}</h1>
           {/* Top Control Toolbar */}
           <div className="cal-main-toolbar">
             <div className="cal-nav-group">
@@ -675,7 +676,7 @@ export function CalendarPage({
               </div>
             </details>
           )}
-        </main>
+        </section>
       </div>
     </div>
   );

@@ -65,53 +65,68 @@ export async function createStudyRoom(userId: string, data: CreateStudyRoomInput
 export async function joinStudyRoom(userId: string, roomId: string, passcode?: string, currentTask?: string) {
   const db = getPrismaClient();
 
-  const room = await db.studyRoom.findUnique({
-    where: { id: roomId },
-    include: {
-      participants: true,
-      host: {
-        select: { id: true, name: true, studentId: true },
-      },
-    },
-  });
-
-  if (!room || room.isClosed) {
-    throw new ApiError(404, 'ROOM_NOT_FOUND', 'Phòng học không tồn tại hoặc đã đóng');
-  }
-
-  // Check passcode if room is locked and user is not host
-  if (room.passcode && room.hostId !== userId) {
-    if (!passcode || passcode.trim() !== room.passcode) {
-      throw new ApiError(403, 'INVALID_PASSCODE');
+  const runWithLock = async (tx: any) => {
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${roomId}, 1))`;
     }
-  }
 
-  const alreadyJoined = room.participants.some(p => p.userId === userId);
-  if (!alreadyJoined && room.participants.length >= room.maxParticipants) {
-    throw new ApiError(409, 'ROOM_FULL');
-  }
+    const room = await tx.studyRoom.findUnique({
+      where: { id: roomId },
+      include: {
+        participants: true,
+        host: {
+          select: { id: true, name: true, studentId: true },
+        },
+      },
+    });
 
-  const participant = await db.studyRoomParticipant.upsert({
-    where: {
-      roomId_userId: {
+    if (!room || room.isClosed) {
+      throw new ApiError(404, 'ROOM_NOT_FOUND', 'Phòng học không tồn tại hoặc đã đóng');
+    }
+
+    // Check passcode if room is locked and user is not host
+    if (room.passcode && room.hostId !== userId) {
+      if (!passcode || passcode.trim() !== room.passcode) {
+        throw new ApiError(403, 'INVALID_PASSCODE');
+      }
+    }
+
+    const count = typeof tx.studyRoomParticipant.count === 'function'
+      ? await tx.studyRoomParticipant.count({ where: { roomId: room.id } })
+      : room.participants.length;
+
+    const alreadyJoined = room.participants.some((p: any) => p.userId === userId);
+    if (!alreadyJoined && count >= room.maxParticipants) {
+      throw new ApiError(409, 'ROOM_FULL');
+    }
+
+    const participant = await tx.studyRoomParticipant.upsert({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId,
+        },
+      },
+      create: {
         roomId: room.id,
         userId,
+        currentTask: currentTask?.trim() || null,
+        isCamOn: false,
+        isMicOn: false,
       },
-    },
-    create: {
-      roomId: room.id,
-      userId,
-      currentTask: currentTask?.trim() || null,
-      isCamOn: false,
-      isMicOn: false,
-    },
-    update: {
-      currentTask: currentTask !== undefined ? currentTask.trim() || null : undefined,
-      lastSeenAt: new Date(),
-    },
-  });
+      update: {
+        currentTask: currentTask !== undefined ? currentTask.trim() || null : undefined,
+        lastSeenAt: new Date(),
+      },
+    });
 
-  return { room, participant };
+    return { room, participant };
+  };
+
+  if (typeof db.$transaction === 'function') {
+    return db.$transaction(runWithLock);
+  }
+  return runWithLock(db);
 }
 
 export async function leaveStudyRoom(userId: string, roomId: string) {
@@ -268,7 +283,7 @@ export async function listActiveStudyRooms() {
   }));
 }
 
-export async function getStudyRoomDetails(roomId: string) {
+export async function getStudyRoomDetails(roomId: string, viewerUserId?: string) {
   const db = getPrismaClient();
 
   const room = await db.studyRoom.findUnique({
@@ -294,8 +309,13 @@ export async function getStudyRoomDetails(roomId: string) {
     throw new ApiError(404, 'ROOM_NOT_FOUND', 'Phòng học không tồn tại hoặc đã đóng');
   }
 
+  // Hide chat messages from unauthenticated viewers or non-members if room has passcode
+  const isMemberOrHost = viewerUserId && (room.hostId === viewerUserId || room.participants.some(p => p.userId === viewerUserId));
+  const safeMessages = room.passcode && !isMemberOrHost ? [] : room.messages;
+
   return {
     ...room,
+    messages: safeMessages,
     hasPasscode: !!room.passcode,
     passcode: undefined, // Don't expose passcode in public details
   };

@@ -113,7 +113,7 @@ router.patch('/tasks/:id', async (req, res) => {
     const previous = await tx.task.findFirst({ where: { id, userId }, include: { scheduleBlocks: { where: { status: 'SCHEDULED' } } } });
     if (!previous) throw new ApiError(404, 'NOT_FOUND');
     const input = taskInput.parse({ ...previous, deadline: previous.deadline.toISOString(), ...req.body });
-    if (+input.deadline <= Date.now()) throw new ApiError(400, 'DEADLINE_PASSED');
+    if (req.body.deadline !== undefined && +input.deadline <= Date.now()) throw new ApiError(400, 'DEADLINE_PASSED');
     if (previous.status !== 'PENDING' && previous.status !== 'IN_PROGRESS') throw new ApiError(409, 'TASK_NOT_EDITABLE');
     if (previous.scheduleBlocks.length && (input.durationMinutes !== previous.durationMinutes || +input.deadline !== +previous.deadline || input.isSplittable !== previous.isSplittable || (input.location || null) !== previous.location)) throw new ApiError(409, 'UNSCHEDULE_FIRST');
     const value = await tx.task.update({ where: { id }, data: input });
@@ -164,6 +164,7 @@ router.patch('/events/:id', async (req, res) => {
   const id = idSchema.parse(req.params.id), userId = req.user!.id;
   res.json(await withUser(userId, async tx => {
     const previous = await tx.event.findFirst({ where: { id, userId } });
+    if (previous && previous.source !== 'MANUAL') throw new ApiError(403, 'OFFICIAL_EVENT_IMMUTABLE', 'Không thể chỉnh sửa hoặc hủy lịch học chính khóa từ cổng thông tin trường.');
     if (!previous) throw new ApiError(404, 'NOT_FOUND');
     const input = eventInput.parse({ ...previous, startTime: previous.startTime.toISOString(), endTime: previous.endTime.toISOString(), ...req.body });
     if (previous.status !== 'CANCELLED') await checkEventConflicts(tx, userId, input, id);
@@ -176,6 +177,7 @@ router.patch('/events/:id/status', async (req, res) => {
   const { status } = z.object({ status: z.enum(['SCHEDULED', 'CANCELLED', 'COMPLETED']) }).parse(req.body);
   const event = await withUser(userId, async tx => {
     const previous = await tx.event.findFirst({ where: { id, userId } });
+    if (previous && previous.source !== 'MANUAL') throw new ApiError(403, 'OFFICIAL_EVENT_IMMUTABLE', 'Không thể chỉnh sửa hoặc hủy lịch học chính khóa từ cổng thông tin trường.');
     if (!previous) throw new ApiError(404, 'NOT_FOUND');
     if (status !== 'CANCELLED') await checkEventConflicts(tx, userId, previous, id);
     const event = await tx.event.update({ where: { id }, data: { status } });

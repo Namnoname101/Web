@@ -4,6 +4,7 @@
 
 :root { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; background: #f8fafc; font-synthesis: none; text-rendering: optimizeLegibility; color-scheme: light; font-size: 14px; font-feature-settings: 'tnum', 'cv02', 'cv03', 'cv04', 'cv11'; --green: #1d4ed8; --ink: #0f172a; --muted: #64748b; --border: #e2e8f0; --card-bg: #ffffff; }
 * { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #f8fafc; color: #0f172a; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }

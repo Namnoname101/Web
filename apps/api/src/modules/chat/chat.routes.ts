@@ -8,6 +8,7 @@ import {
   listUserConversations,
 } from './chat.service.js';
 import { ApiError } from '../../lib/errors.js';
+import { idSchema } from '../../lib/validation.js';
 
 export const chatRouter = Router();
 
@@ -47,7 +48,7 @@ chatRouter.post('/chat/conversations', async (req, res) => {
 // Lấy tin nhắn của một cuộc hội thoại
 chatRouter.get('/chat/conversations/:id/messages', async (req, res) => {
   if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED');
-  const convId = req.params.id;
+  const convId = idSchema.parse(req.params.id);
   const messages = await getConversationMessages(req.user.id, convId);
   res.json(messages);
 });
@@ -55,7 +56,7 @@ chatRouter.get('/chat/conversations/:id/messages', async (req, res) => {
 // Gửi tin nhắn trực tiếp
 chatRouter.post('/chat/conversations/:id/messages', async (req, res) => {
   if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED');
-  const convId = req.params.id;
+  const convId = idSchema.parse(req.params.id);
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'INVALID_INPUT', 'Nội dung tin nhắn không hợp lệ');
 
