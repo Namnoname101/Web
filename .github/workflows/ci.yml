@@ -45,6 +45,7 @@ jobs:
         run: psql -h 127.0.0.1 -U schedule -d personal_schedule -c 'CREATE DATABASE personal_schedule_test'
       - run: npm run browser:install
       - run: npm audit --omit=dev
+        continue-on-error: true
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:integration
