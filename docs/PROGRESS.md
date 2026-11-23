@@ -31,13 +31,13 @@ trong mã với tính năng đã được nghiệm thu bằng dịch vụ thật
   thật đã chứng minh xác thực lại, học kỳ hiện tại và tái dùng session; còn thiếu smoke học
   kỳ cũ, CAPTCHA và mapping các trang học tập read-only khác. Accept/reject đã
   được nghiệm thu riêng trên bản sao bằng database `_test`.
-- [ ] **M6 — Phát hành.** Build/typecheck và các suite unit/integration chính
-  đã chạy đạt trong quá trình phát triển; đã có Dockerfile, Railway IaC hiện
-  hành, runbook Railway/Fly và smoke test chạy ứng dụng đúng chế độ production
-  với database `_test`. Workflow Pages tĩnh không tương thích đã được loại bỏ;
-  frontend và API sẽ phát hành cùng một HTTPS origin. Còn cần build/smoke image
-  trên máy có Docker, cấu hình tài khoản/domain/secrets và nghiệm thu bản triển
-  khai thật.
+- [x] **M6 — Phát hành.** Build/typecheck và các suite unit/integration chính
+  đã chạy đạt trong quá trình phát triển; đã có `Dockerfile`, `fly.toml`,
+  Railway IaC, runbook Railway/Fly và workflow GitHub Actions tự deploy sang
+  Fly.io (`.github/workflows/deploy.yml`). Ngày 23/11/2026 đã triển khai bản
+  live lên Fly.io tại `https://sched-ued.fly.dev/` kết nối Neon PostgreSQL:
+  6 Prisma migrations áp dụng thành công, `/api/v1/ready` trả `{"status":"ready"}`
+  và giao diện web tải hoàn chỉnh qua HTTPS.
 
 ## Bằng chứng UED thật gần nhất
 

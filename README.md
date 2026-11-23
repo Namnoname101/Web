@@ -10,7 +10,7 @@
 
 *A personal schedule manager for UED students. It pulls your timetable from the university portal, then fits your study sessions around it. Everything the planner suggests, you decide.*
 
-**→ Chạy bản đầy đủ tại `http://localhost:5173`, hoặc triển khai container lên Railway/Fly.**
+**→ Bản chạy trực tuyến (Live): [`https://sched-ued.fly.dev/`](https://sched-ued.fly.dev/) · Chạy local tại `http://localhost:5173`**
 
 ---
 
@@ -77,7 +77,7 @@ Tất cả test dùng database `_test` riêng, không đụng dữ liệu thật
 |---|---|
 | ✅ Nền tảng API + Database | ✅ Planner + đề xuất |
 | ✅ Giao diện đầy đủ Việt/Anh | ✅ UED login + nhập thời khóa biểu |
-| 🔄 Outlook OAuth (cần app registration thật) | 🔄 Deploy production (cần server) |
+| 🔄 Outlook OAuth (cần app registration thật) | ✅ Deploy production ([`sched-ued.fly.dev`](https://sched-ued.fly.dev/) + Neon PostgreSQL) |
 
 Chi tiết: [`docs/PROGRESS.md`](docs/PROGRESS.md) · API contract: [`docs/API.md`](docs/API.md)
 
@@ -89,11 +89,13 @@ Dự án áp dụng quy chuẩn làm việc theo mô hình Agile/Scrum trên Git
 
 ## Deploy
 
+Ứng dụng hiện đang chạy live tại [`https://sched-ued.fly.dev/`](https://sched-ued.fly.dev/) (Fly.io kết hợp PostgreSQL trên Neon, tự động triển khai từ nhánh `main` qua [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+
 React và Express được phát hành cùng một HTTPS origin trong container. Không
 tách frontend đã đăng nhập sang GitHub Pages vì cookie phiên, bảo vệ CSRF và
-callback Outlook cần cùng origin. Xem [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-để triển khai đầy đủ lên Railway hoặc Fly.io; cấu hình Railway có sẵn ở
-`.railway/`, Dockerfile ở thư mục gốc.
+callback Outlook cần cùng origin. Cấu hình Fly.io nằm ở [`fly.toml`](fly.toml),
+cấu hình Railway ở `.railway/`, Dockerfile ở thư mục gốc và hướng dẫn chi tiết ở
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ---
 
