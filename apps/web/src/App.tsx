@@ -43,6 +43,8 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now());
   const [loadedWeek, setLoadedWeek] = useState<string | null>(null);
   const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
+  const [awaitingLoginSync, setAwaitingLoginSync] = useState(false);
+  const loginSyncStartedAtRef = useRef<number>(0);
   const requestNumber = useRef(0);
   const trackedToday = useRef<{ userId: string; day: string } | null>(null);
   const clock = useRef(new ServerClock());
@@ -99,6 +101,37 @@ export default function App() {
     void bootstrap().catch(err => { if (mounted) setError(errorMessage(err, localeRef.current)); }).finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; requestNumber.current++; };
   }, [bootstrap]);
+  const uedIntegration = data?.integrations.find(item => item.provider === 'UED');
+  const uedPendingInitialSync = uedIntegration?.status === 'CONNECTED' && !uedIntegration.lastSyncAt && !uedIntegration.lastError;
+  const uedSyncedAfterLogin = Boolean(
+    awaitingLoginSync && uedIntegration?.status === 'CONNECTED' && uedIntegration.lastSyncAt
+    && Date.parse(uedIntegration.lastSyncAt) >= loginSyncStartedAtRef.current - 5_000,
+  );
+  const shouldPollUedSync = Boolean(user && ((uedPendingInitialSync || (awaitingLoginSync && !uedSyncedAfterLogin && !uedIntegration?.lastError))));
+  const uedPollCountRef = useRef(0);
+  const wasPollingUedSyncRef = useRef(false);
+  useEffect(() => {
+    if (!shouldPollUedSync) {
+      if ((wasPollingUedSyncRef.current || awaitingLoginSync) && uedIntegration?.status === 'CONNECTED' && uedIntegration.lastSyncAt && !uedIntegration.lastError) {
+        setToast(t('Đã đồng bộ xong thời khóa biểu học kỳ hiện tại.', 'Your current semester timetable is synced.'));
+      }
+      if (awaitingLoginSync && (uedSyncedAfterLogin || uedIntegration?.lastError)) setAwaitingLoginSync(false);
+      wasPollingUedSyncRef.current = false;
+      uedPollCountRef.current = 0;
+      return;
+    }
+    wasPollingUedSyncRef.current = true;
+    const timer = setInterval(() => {
+      if (uedPollCountRef.current >= 12) {
+        clearInterval(timer);
+        setAwaitingLoginSync(false);
+        return;
+      }
+      uedPollCountRef.current++;
+      if (!busyRef.current) void bootstrap().catch(() => undefined);
+    }, 2_500);
+    return () => clearInterval(timer);
+  }, [awaitingLoginSync, bootstrap, shouldPollUedSync, uedIntegration?.lastError, uedIntegration?.lastSyncAt, uedIntegration?.status, uedSyncedAfterLogin]);
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => { if (document.visibilityState === 'visible' && !busyRef.current && !dialogRef.current) void bootstrap().catch(() => undefined); }, 30_000);
@@ -173,6 +206,19 @@ export default function App() {
   }, []);
   const navigate = (next: View) => { location.hash = next === 'suggestions' ? 'calendar/suggestions' : next; setView(next); setMenu(false); if (next === 'dashboard' && user) { const day = localDay(user.timezone, now); setWeek(monday(day)); setSelectedDay(day); } };
   const refresh = async () => { setLoading(true); setError(''); try { await bootstrap(); } catch (err) { setError(errorMessage(err, locale)); } finally { setLoading(false); } };
+  const handleUedConnected = (value: User, synced?: boolean) => {
+    const alreadySignedIn = user?.id === value.id;
+    identify(value);
+    if (alreadySignedIn) void refresh();
+    if (synced) {
+      setAwaitingLoginSync(false);
+      setToast(t('Đã kết nối UED và đồng bộ thời khóa biểu học kỳ hiện tại.', 'UED connected and your current semester timetable is synced.'));
+    } else {
+      loginSyncStartedAtRef.current = Date.now();
+      setAwaitingLoginSync(true);
+      setToast(t('Đã kết nối UED. Đang đồng bộ thời khóa biểu học kỳ hiện tại…', 'UED connected. Syncing your current semester timetable…'));
+    }
+  };
   const mutate = async (path: string, method: string, body?: unknown, message?: string) => {
     const result = await api(path, method, body);
     await bootstrap(); if (message) setToast(message); return result;
@@ -227,13 +273,13 @@ export default function App() {
   const globalAction = async (action: () => Promise<unknown>) => { setBusy(true); setError(''); try { await action(); } catch (err) { setError(errorMessage(err, locale)); } finally { setBusy(false); } };
   const close = useCallback(() => setDialog(null), []);
   const beginDemo = () => globalAction(async () => { identify((await api<{ user: User }>('/auth/demo', 'POST', {})).user); navigate('dashboard'); });
-  const logout = () => globalAction(async () => { await api('/auth/logout', 'POST', {}); requestNumber.current++; historyRequest.current++; expandedTaskHistory.current = false; setTaskHistoryLoading(false); setUser(null); setData(null); setDialog(null); setMenu(false); });
+  const logout = () => globalAction(async () => { await api('/auth/logout', 'POST', {}); requestNumber.current++; historyRequest.current++; expandedTaskHistory.current = false; setTaskHistoryLoading(false); setAwaitingLoginSync(false); setUser(null); setData(null); setDialog(null); setMenu(false); });
   const showTask = (task: Task) => setDialog({ kind: 'task-detail', task });
   const showAgenda = (item: AgendaItem) => item.event ? setDialog({ kind: 'event-detail', event: item.event }) : item.task && showTask(item.task);
   const days = Array.from({ length: 7 }, (_, index) => shiftDay(week, index));
   const waiting = data?.suggestions.filter(suggestion => isSuggestionPending(suggestion, now)) || [], unread = data?.notifications.filter(item => !item.readAt).length || 0;
   if (initializing) return <main className="loading-screen"><Brand /><Spinner /><p>{t('Đang mở không gian học tập của bạn…', 'Opening your study space…')}</p></main>;
-  if (!user) return <><main className="welcome"><section className="welcome-story"><Brand /><div className="welcome-copy"><span className="eyebrow">{t('MỘT NHỊP HỌC, THẬT RIÊNG BẠN', 'A STUDY RHYTHM OF YOUR OWN')}</span><h1>{t('Sắp xếp một ngày.', 'Plan your day.')}<br /><em>{t('Dành chỗ cho tương lai.', 'Make room for tomorrow.')}</em></h1><p>{t('Lịch học, công việc và những khoảng nghỉ. Kết nối mọi thứ, để bạn tập trung vào điều quan trọng.', 'Classes, tasks, and a little breathing room. Bring it all together, and focus on what matters.')}</p><div className="welcome-promises"><span><CalendarCheck2 />{t('Lịch học trong một nơi', 'Your studies, in one place')}</span><span><CalendarCheck2 />{t('Gợi ý phù hợp với bạn', 'Suggestions that fit your day')}</span><span><CheckCheck />{t('Bạn luôn là người quyết định', 'You always make the call')}</span></div></div><p className="welcome-university"><GraduationCap size={18} />{t('Đại học Sư phạm · Đại học Đà Nẵng', 'University of Education · The University of Danang')}</p><div className="welcome-orbit" aria-hidden="true"><div /><div /><div /><span><BookOpen size={48} /></span></div></section><section className="welcome-login"><button className="language-switch" onClick={() => chooseLocale(locale === 'vi' ? 'en' : 'vi')}>{locale === 'vi' ? 'English' : 'Tiếng Việt'}<span>↗</span></button><div className="login-content"><span className="login-icon"><GraduationCap size={30} /></span><h2>{t('Chào bạn, sinh viên UED.', 'Hello, UED student.')}</h2><p>{t('Một ngày chủ động hơn bắt đầu từ đây.', 'A more intentional day starts here.')}</p>{error && <ErrorNotice>{error}</ErrorNotice>}{config.uedEnabled && <button className="button button-primary login-button" disabled={busy} onClick={() => setDialog({ kind: 'ued' })}><GraduationCap size={19} />{t('Đăng nhập bằng mã sinh viên', 'Sign in with your student ID')}<ArrowRight size={18} /></button>}{!config.uedEnabled && <div className="callout callout-amber">{t('Kết nối tài khoản trường đang được chuẩn bị. Bạn có thể trải nghiệm bản demo nếu khả dụng.', 'School account sign-in is being prepared. You can explore the demo when available.')}</div>}{config.demoEnabled && <><div className="login-divider"><span>{t('hoặc tìm hiểu trước', 'or take a look around')}</span></div><button className="button button-quiet login-button" disabled={busy} onClick={beginDemo}>{busy ? <Spinner /> : <ArrowRight size={18} />}{t('Khám phá bản demo', 'Explore the demo')}</button><small>{t('Không cần tài khoản. Dữ liệu minh họa được ghi nhãn rõ ràng.', 'No account needed. Sample data is clearly labelled.')}</small></>}{error && <button className="text-link" onClick={initialize}>{t('Kiểm tra kết nối lại', 'Check connection again')}<RefreshCw size={14} /></button>}<p className="login-footnote">{t('Đăng nhập bằng mã sinh viên UED. Outlook chỉ là kết nối tùy chọn sau đăng nhập. Mật khẩu UED không được lưu lại.', 'Sign in with your student ID. Outlook is an optional connection after sign-in. Your UED password is never stored.')}</p></div><span className="welcome-footer">Personal Automated Schedule for Students</span></section></main>{dialog?.kind === 'ued' && <Suspense fallback={null}><UedConnect locale={locale} t={t} connected={identify} close={close} /></Suspense>}</>;
+  if (!user) return <><main className="welcome"><section className="welcome-story"><Brand /><div className="welcome-copy"><span className="eyebrow">{t('MỘT NHỊP HỌC, THẬT RIÊNG BẠN', 'A STUDY RHYTHM OF YOUR OWN')}</span><h1>{t('Sắp xếp một ngày.', 'Plan your day.')}<br /><em>{t('Dành chỗ cho tương lai.', 'Make room for tomorrow.')}</em></h1><p>{t('Lịch học, công việc và những khoảng nghỉ. Kết nối mọi thứ, để bạn tập trung vào điều quan trọng.', 'Classes, tasks, and a little breathing room. Bring it all together, and focus on what matters.')}</p><div className="welcome-promises"><span><CalendarCheck2 />{t('Lịch học trong một nơi', 'Your studies, in one place')}</span><span><CalendarCheck2 />{t('Gợi ý phù hợp với bạn', 'Suggestions that fit your day')}</span><span><CheckCheck />{t('Bạn luôn là người quyết định', 'You always make the call')}</span></div></div><p className="welcome-university"><GraduationCap size={18} />{t('Đại học Sư phạm · Đại học Đà Nẵng', 'University of Education · The University of Danang')}</p><div className="welcome-orbit" aria-hidden="true"><div /><div /><div /><span><BookOpen size={48} /></span></div></section><section className="welcome-login"><button className="language-switch" onClick={() => chooseLocale(locale === 'vi' ? 'en' : 'vi')}>{locale === 'vi' ? 'English' : 'Tiếng Việt'}<span>↗</span></button><div className="login-content"><span className="login-icon"><GraduationCap size={30} /></span><h2>{t('Chào bạn, sinh viên UED.', 'Hello, UED student.')}</h2><p>{t('Một ngày chủ động hơn bắt đầu từ đây.', 'A more intentional day starts here.')}</p>{error && <ErrorNotice>{error}</ErrorNotice>}{config.uedEnabled && <button className="button button-primary login-button" disabled={busy} onClick={() => setDialog({ kind: 'ued' })}><GraduationCap size={19} />{t('Đăng nhập bằng mã sinh viên', 'Sign in with your student ID')}<ArrowRight size={18} /></button>}{!config.uedEnabled && <div className="callout callout-amber">{t('Kết nối tài khoản trường đang được chuẩn bị. Bạn có thể trải nghiệm bản demo nếu khả dụng.', 'School account sign-in is being prepared. You can explore the demo when available.')}</div>}{config.demoEnabled && <><div className="login-divider"><span>{t('hoặc tìm hiểu trước', 'or take a look around')}</span></div><button className="button button-quiet login-button" disabled={busy} onClick={beginDemo}>{busy ? <Spinner /> : <ArrowRight size={18} />}{t('Khám phá bản demo', 'Explore the demo')}</button><small>{t('Không cần tài khoản. Dữ liệu minh họa được ghi nhãn rõ ràng.', 'No account needed. Sample data is clearly labelled.')}</small></>}{error && <button className="text-link" onClick={initialize}>{t('Kiểm tra kết nối lại', 'Check connection again')}<RefreshCw size={14} /></button>}<p className="login-footnote">{t('Đăng nhập bằng mã sinh viên UED. Outlook chỉ là kết nối tùy chọn sau đăng nhập. Mật khẩu UED không được lưu lại.', 'Sign in with your student ID. Outlook is an optional connection after sign-in. Your UED password is never stored.')}</p></div><span className="welcome-footer">Personal Automated Schedule for Students</span></section></main>{dialog?.kind === 'ued' && <Suspense fallback={null}><UedConnect locale={locale} t={t} connected={handleUedConnected} close={close} /></Suspense>}</>;
   const titles: Record<View, [string, string]> = {
     dashboard: [t('Tổng quan', 'Dashboard'), ''],
     calendar: [t('Lịch của tôi', 'Calendar'), t('Lớp học, lịch cá nhân và các phiên tự học đã xác nhận.', 'Classes, personal events and confirmed study sessions.')],
@@ -297,7 +343,7 @@ export default function App() {
           {toast && <div className="toast" role="status"><CheckCheck size={18} />{toast}<button onClick={() => setToast('')} aria-label={t('Đóng', 'Close')}><X size={15} /></button></div>}
           {dialog?.kind === 'confirm-disconnect' && <ConfirmDialog title={t(`Ngắt kết nối ${dialog.provider}`, `Disconnect ${dialog.provider}`)} message={t(`Ngắt kết nối ${dialog.provider}? Các lịch đã chấp nhận vẫn được giữ lại.`, `Disconnect ${dialog.provider}? Your accepted calendar events will be kept.`)} confirmLabel={t('Ngắt kết nối', 'Disconnect')} cancelLabel={t('Hủy', 'Cancel')} danger busy={busy} onConfirm={async () => { const provider = dialog.provider; close(); await globalAction(() => mutate(`/integrations/${provider}`, 'DELETE', undefined, t('Đã ngắt kết nối.', 'Disconnected.'))); }} onCancel={close} />}
           <Suspense fallback={null}>
-            {dialog?.kind === 'ued' && <UedConnect locale={locale} t={t} connected={value => { identify(value); void refresh(); }} close={close} />}
+            {dialog?.kind === 'ued' && <UedConnect locale={locale} t={t} connected={handleUedConnected} close={close} />}
             {dialog?.kind === 'task' && <TaskForm now={now} task={dialog.task} user={user} locale={locale} t={t} close={close} save={async (body, id) => { await taskMutation(id ? `/tasks/${id}` : '/tasks', id ? 'PATCH' : 'POST', body, t('Đã lưu công việc.', 'Task saved.')); }} />}
             {dialog?.kind === 'event' && <EventForm event={dialog.event} day={selectedDay} user={user} locale={locale} t={t} close={close} save={async (body, id) => { if (dialog.event && !isPersonalEvent(dialog.event)) return; await calendarMutation(id ? `/events/${id}` : '/events', id ? 'PATCH' : 'POST', body, t('Đã lưu lịch cá nhân.', 'Personal event saved.')); }} />}
             {dialog?.kind === 'plan' && <PlanForm now={now} user={user} locale={locale} t={t} close={close} propose={async (fromDate, toDate) => { const suggestion = await api<Suggestion>('/scheduling/proposals', 'POST', { fromDate, toDate }); setData(current => current ? { ...current, suggestions: [suggestion, ...current.suggestions.filter(item => item.id !== suggestion.id)] } : current); try { await bootstrap(); } catch (err) { setError(errorMessage(err, locale)); } setDialog({ kind: 'proposal', suggestion }); }} />}

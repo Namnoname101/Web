@@ -16,6 +16,59 @@ let authCleanupLastRun = 0;
  * message, query, response body, token, or student content into logs. */
 export const workerErrorSummary = safeErrorSummary;
 
+async function claimAndSyncIntegration(candidate: {
+  id: string;
+  provider: 'UED' | 'OUTLOOK';
+  encryptedSecret: string | null;
+  failures: number;
+}): Promise<boolean> {
+  const db = getPrismaClient();
+  const now = new Date();
+  const leaseToken = randomUUID();
+  const claimed = await db.integration.updateMany({
+    where: { id: candidate.id, status: 'CONNECTED', nextSyncAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] },
+    data: { leaseToken, lockedUntil: new Date(+now + LEASE_MS) },
+  });
+  if (!claimed.count) return false;
+
+  const heartbeat = setInterval(() => {
+    void db.integration.updateMany({ where: { id: candidate.id, leaseToken }, data: { lockedUntil: new Date(Date.now() + LEASE_MS) } })
+      .catch(() => console.error('Worker heartbeat unavailable'));
+  }, 30_000);
+  heartbeat.unref();
+
+  let succeeded = false;
+  try {
+    if (candidate.provider === 'OUTLOOK') await syncOutlook(candidate.id);
+    else await syncUed(candidate.id);
+    succeeded = true;
+  } catch (error) {
+    const code = error instanceof ApiError ? error.code : 'SYNC_FAILED';
+    console.warn('Integration sync deferred', { provider: candidate.provider, code, message: (error as Error)?.message, stack: (error as Error)?.stack });
+    // Outlook owns its own cursor/backoff. UED errors retry with capped backoff.
+    if (candidate.provider === 'UED') await db.integration.updateMany({
+      where: { id: candidate.id, leaseToken, status: 'CONNECTED', encryptedSecret: candidate.encryptedSecret },
+      data: { lastError: code, failures: { increment: 1 }, nextSyncAt: new Date(Date.now() + Math.min(3_600_000, 60_000 * 2 ** Math.min(candidate.failures, 6))) },
+    });
+  } finally {
+    clearInterval(heartbeat);
+    await db.integration.updateMany({ where: { id: candidate.id, leaseToken }, data: { lockedUntil: null, leaseToken: null } });
+  }
+  return succeeded;
+}
+
+/** Immediately sync a specific user's connected integration using the same
+ * distributed lease so login/manual syncs never race the background loop. */
+export async function syncUserIntegrationNow(userId: string, provider: 'UED' | 'OUTLOOK'): Promise<boolean> {
+  const db = getPrismaClient();
+  const now = new Date();
+  const candidate = await db.integration.findFirst({
+    where: { userId, provider, status: 'CONNECTED', nextSyncAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] },
+  });
+  if (!candidate) return false;
+  return claimAndSyncIntegration(candidate);
+}
+
 /** Persisted leases survive crashes; tokens prevent an old worker from
  * clearing or renewing a replacement worker's lease after expiry. */
 export async function workerTick(): Promise<void> {
@@ -25,31 +78,7 @@ export async function workerTick(): Promise<void> {
     where: { status: 'CONNECTED', nextSyncAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] },
     orderBy: { nextSyncAt: 'asc' },
   });
-  if (candidate) {
-    const leaseToken = randomUUID();
-    const claimed = await db.integration.updateMany({ where: { id: candidate.id, status: 'CONNECTED', nextSyncAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] }, data: { leaseToken, lockedUntil: new Date(+now + LEASE_MS) } });
-    if (claimed.count) {
-      const heartbeat = setInterval(() => {
-        void db.integration.updateMany({ where: { id: candidate.id, leaseToken }, data: { lockedUntil: new Date(Date.now() + LEASE_MS) } }).catch(() => console.error('Worker heartbeat unavailable'));
-      }, 30_000);
-      heartbeat.unref();
-      try {
-        if (candidate.provider === 'OUTLOOK') await syncOutlook(candidate.id);
-        else await syncUed(candidate.id);
-      } catch (error) {
-        const code = error instanceof ApiError ? error.code : 'SYNC_FAILED';
-        console.warn('Integration sync deferred', { provider: candidate.provider, code, message: (error as Error)?.message, stack: (error as Error)?.stack });
-        // Outlook owns its own cursor/backoff. UED errors retry with capped backoff.
-        if (candidate.provider === 'UED') await db.integration.updateMany({
-          where: { id: candidate.id, leaseToken, status: 'CONNECTED', encryptedSecret: candidate.encryptedSecret },
-          data: { lastError: code, failures: { increment: 1 }, nextSyncAt: new Date(Date.now() + Math.min(3_600_000, 60_000 * 2 ** Math.min(candidate.failures, 6))) },
-        });
-      } finally {
-        clearInterval(heartbeat);
-        await db.integration.updateMany({ where: { id: candidate.id, leaseToken }, data: { lockedUntil: null, leaseToken: null } });
-      }
-    }
-  }
+  if (candidate) await claimAndSyncIntegration(candidate);
   if (Date.now() - reminderLastRun > 60_000) {
     await createDeadlineReminders(); reminderLastRun = Date.now();
   }

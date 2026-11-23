@@ -131,10 +131,23 @@ export async function connectVerifiedUed(identity: { studentId: string; name?: s
         create: { studentId: identity.studentId, email: `${identity.studentId}@students.ued.invalid`,
           name: identity.name || identity.studentId } });
     }
+    const existingIntegration = await tx.integration.findUnique({
+      where: { userId_provider: { userId: user.id, provider: 'UED' } },
+      select: { cursor: true },
+    });
+    const previousCursor = existingIntegration?.cursor && typeof existingIntegration.cursor === 'object'
+      && !Array.isArray(existingIntegration.cursor) ? existingIntegration.cursor as Prisma.JsonObject : {};
+    // Signing into UED defaults back to the school's live current semester so
+    // an older manual filter never hides the active timetable after login.
+    const nextCursor: Prisma.InputJsonObject = {
+      ...previousCursor,
+      uedTermMode: 'CURRENT',
+      uedTerm: null,
+    };
     const encryptedSecret = encrypt({ version: 1, studentId: identity.studentId, storageState } satisfies UedSecret, `${user.id}:UED`);
     await tx.integration.upsert({ where: { userId_provider: { userId: user.id, provider: 'UED' } },
-      create: { userId: user.id, provider: 'UED', status: 'CONNECTED', encryptedSecret },
-      update: { status: 'CONNECTED', encryptedSecret, lastError: null, failures: 0, nextSyncAt: new Date(), lockedUntil: null, leaseToken: null } });
+      create: { userId: user.id, provider: 'UED', status: 'CONNECTED', encryptedSecret, cursor: nextCursor },
+      update: { status: 'CONNECTED', encryptedSecret, cursor: nextCursor, lastError: null, failures: 0, nextSyncAt: new Date(), lockedUntil: null, leaseToken: null } });
     return user;
   };
   return userId ? withUser(userId, perform) : db.$transaction(perform);

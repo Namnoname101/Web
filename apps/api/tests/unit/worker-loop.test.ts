@@ -4,6 +4,9 @@ const fixture = vi.hoisted(() => ({
   execute: vi.fn(),
   deleteSessions: vi.fn(),
   deleteAttempts: vi.fn(),
+  findIntegration: vi.fn(),
+  updateIntegrations: vi.fn(),
+  syncUed: vi.fn(),
 }));
 
 vi.mock('@personal-schedule/database', () => ({
@@ -11,12 +14,13 @@ vi.mock('@personal-schedule/database', () => ({
     $executeRaw: fixture.execute,
     session: { deleteMany: fixture.deleteSessions },
     oAuthAttempt: { deleteMany: fixture.deleteAttempts },
+    integration: { findFirst: fixture.findIntegration, updateMany: fixture.updateIntegrations },
   }),
 }));
 vi.mock('../../src/modules/integrations/outlook/outlook.service.js', () => ({ syncOutlook: vi.fn() }));
-vi.mock('../../src/modules/integrations/ued/ued.service.js', () => ({ syncUed: vi.fn() }));
+vi.mock('../../src/modules/integrations/ued/ued.service.js', () => ({ syncUed: fixture.syncUed }));
 
-import { cleanupExpiredAuthentication, createDeadlineReminders, workerErrorSummary } from '../../src/jobs/worker-loop.js';
+import { cleanupExpiredAuthentication, createDeadlineReminders, syncUserIntegrationNow, workerErrorSummary } from '../../src/jobs/worker-loop.js';
 
 describe('worker maintenance', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -50,5 +54,19 @@ describe('worker maintenance', () => {
     expect(JSON.stringify(workerErrorSummary(error))).not.toContain('student data');
     expect(workerErrorSummary({ code: 'unsafe code with spaces', token: 'secret' }))
       .toEqual({ name: 'object', code: 'UNEXPECTED_ERROR' });
+  });
+
+  it('claims, syncs and releases the lease for a newly signed-in user integration', async () => {
+    fixture.findIntegration.mockResolvedValue({ id: 'int-ued-1', provider: 'UED', encryptedSecret: 'secret', failures: 0 });
+    fixture.updateIntegrations.mockResolvedValue({ count: 1 });
+    fixture.syncUed.mockResolvedValue({ records: 10, imported: 10, proposals: 0 });
+
+    await expect(syncUserIntegrationNow('user-1', 'UED')).resolves.toBe(true);
+
+    expect(fixture.findIntegration).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: 'user-1', provider: 'UED', status: 'CONNECTED' }),
+    }));
+    expect(fixture.syncUed).toHaveBeenCalledWith('int-ued-1');
+    expect(fixture.updateIntegrations).toHaveBeenCalledTimes(2);
   });
 });

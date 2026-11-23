@@ -3,22 +3,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   findIntegration: vi.fn(), currentIntegration: vi.fn(), createRecord: vi.fn(),
   findRecord: vi.fn(),
-  read: vi.fn(), updateIntegration: vi.fn(), updateIntegrations: vi.fn(), findUser: vi.fn(),
+  read: vi.fn(), updateIntegration: vi.fn(), updateIntegrations: vi.fn(), upsertIntegration: vi.fn(),
+  findUser: vi.fn(), findUniqueUser: vi.fn(), upsertUser: vi.fn(), updateUser: vi.fn(),
   findEvents: vi.fn(), findEvent: vi.fn(), createEvent: vi.fn(), findSuggestion: vi.fn(), findSuggestions: vi.fn(),
   findSuggestionForAccept: vi.fn(), updateSuggestion: vi.fn(),
   updateSuggestions: vi.fn(), createSuggestion: vi.fn(), createNotification: vi.fn(),
-  upsertNotification: vi.fn(), decrypt: vi.fn(), bumpVersion: vi.fn(),
+  upsertNotification: vi.fn(), decrypt: vi.fn(), encrypt: vi.fn(), bumpVersion: vi.fn(),
 }));
-vi.mock('@personal-schedule/database', () => ({ getPrismaClient: () => ({ integration: { findUnique: mocks.findIntegration } }) }));
-vi.mock('../../src/lib/transaction.js', () => ({ withUser: async (_id: string, operation: (tx: unknown) => unknown) => operation({
-  integration: { findUnique: mocks.currentIntegration, update: mocks.updateIntegration, updateMany: mocks.updateIntegrations },
-  academicRecord: { findFirst: mocks.findRecord, upsert: mocks.createRecord }, user: { findUniqueOrThrow: mocks.findUser },
+const txMocks = {
+  integration: {
+    findUnique: mocks.currentIntegration, update: mocks.updateIntegration,
+    updateMany: mocks.updateIntegrations, upsert: mocks.upsertIntegration,
+  },
+  academicRecord: { findFirst: mocks.findRecord, upsert: mocks.createRecord },
+  user: { findUniqueOrThrow: mocks.findUser, findUnique: mocks.findUniqueUser, upsert: mocks.upsertUser, update: mocks.updateUser },
   event: { findMany: mocks.findEvents, findUnique: mocks.findEvent, create: mocks.createEvent },
   suggestion: { findUnique: mocks.findSuggestion, findMany: mocks.findSuggestions, findFirst: mocks.findSuggestionForAccept,
     update: mocks.updateSuggestion, updateMany: mocks.updateSuggestions, create: mocks.createSuggestion },
   notification: { create: mocks.createNotification, upsert: mocks.upsertNotification },
-}), bumpVersion: mocks.bumpVersion }));
-vi.mock('../../src/lib/crypto.js', () => ({ hash: (value: string) => value, encrypt: vi.fn(),
+};
+vi.mock('@personal-schedule/database', () => ({ getPrismaClient: () => ({
+  integration: { findUnique: mocks.findIntegration },
+  $transaction: async (operation: (tx: unknown) => unknown) => operation(txMocks),
+}) }));
+vi.mock('../../src/lib/transaction.js', () => ({ withUser: async (_id: string, operation: (tx: unknown) => unknown) => operation(txMocks), bumpVersion: mocks.bumpVersion }));
+vi.mock('../../src/lib/crypto.js', () => ({ hash: (value: string) => value, encrypt: mocks.encrypt,
   decrypt: mocks.decrypt }));
 vi.mock('../../src/modules/integrations/ued/browser.js', () => ({ readUedPortal: mocks.read }));
 vi.mock('../../src/modules/integrations/ued/adapter.js', async importOriginal => ({
@@ -27,7 +36,7 @@ vi.mock('../../src/modules/integrations/ued/adapter.js', async importOriginal =>
 }));
 
 import { acceptEventChange } from '../../src/modules/scheduling/event-changes.js';
-import { materializeLegacyUedTimetable, syncUed, uedChangeIdentity, uedEventChange } from '../../src/modules/integrations/ued/ued.service.js';
+import { connectVerifiedUed, materializeLegacyUedTimetable, syncUed, uedChangeIdentity, uedEventChange } from '../../src/modules/integrations/ued/ued.service.js';
 
 const schedule = { externalId: 'external1', title: 'Class', startTime: '2026-09-14T00:00:00.000Z',
   endTime: '2026-09-14T02:00:00.000Z', location: 'A101', eventType: 'CLASS' as const, cancelled: false };
@@ -306,5 +315,39 @@ describe('legacy UED fixed-timetable materialization', () => {
     expect(mocks.createEvent).not.toHaveBeenCalled();
     expect(mocks.updateSuggestion).not.toHaveBeenCalled();
     expect(mocks.bumpVersion).not.toHaveBeenCalled();
+  });
+});
+
+describe('connectVerifiedUed default current semester reset', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.encrypt.mockReturnValue('encrypted-ued-secret');
+    mocks.upsertUser.mockResolvedValue({ id: 'user1', studentId: '4170001' });
+    mocks.currentIntegration.mockResolvedValue({
+      cursor: {
+        uedTermMode: 'SELECTED',
+        uedTerm: { academicYear: '2024', semester: '2' },
+        uedTimetableBaselineTerms: ['2024:2'],
+      },
+    });
+    mocks.upsertIntegration.mockResolvedValue({});
+  });
+
+  it('resets uedTermMode to CURRENT on login while preserving timetable baseline markers', async () => {
+    await connectVerifiedUed({ studentId: '4170001', name: 'Student' }, { cookies: [], origins: [] });
+
+    expect(mocks.upsertIntegration).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        cursor: expect.objectContaining({ uedTermMode: 'CURRENT', uedTerm: null }),
+      }),
+      update: expect.objectContaining({
+        status: 'CONNECTED',
+        cursor: {
+          uedTermMode: 'CURRENT',
+          uedTerm: null,
+          uedTimetableBaselineTerms: ['2024:2'],
+        },
+      }),
+    }));
   });
 });
