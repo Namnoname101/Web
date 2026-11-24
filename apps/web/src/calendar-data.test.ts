@@ -72,6 +72,7 @@ describe('Calendar time grid layout & period badges', () => {
   it('identifies UED period ranges from start and end times', () => {
     expect(getUedPeriodBadge('07:00', '08:40')).toBe('Tiết 1–2');
     expect(getUedPeriodBadge('13:00', '15:35')).toBe('Tiết 7–9');
+    expect(getUedPeriodBadge('18:30', '21:05')).toBe('Tiết 13–15');
     expect(getUedPeriodBadge('07:00', '07:50')).toBe('Tiết 1');
     expect(getUedPeriodBadge('10:00', '11:00')).toBeNull();
   });

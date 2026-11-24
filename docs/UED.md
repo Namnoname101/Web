@@ -154,11 +154,14 @@ các mốc này, không giả định tiết học dài một giờ.
 | 10 | 15:40 | 16:30 |
 | 11 | 16:35 | 17:25 |
 | 12 | 17:25 | 18:15 |
+| 13 | 18:30 | 19:20 |
+| 14 | 19:20 | 20:10 |
+| 15 | 20:15 | 21:05 |
 
-Chuỗi portal có thể chứa đến mười lăm vị trí tiết. Giờ tiết 13–15 chưa được
-xác nhận: gặp những tiết đó, bộ mở rộng báo `UED_PERIOD_TIMES_REQUIRED`, không
-tự đặt giờ. Thiếu ngày của tuần học hoặc buổi học trùng cũng làm lần đồng bộ
-thất bại thay vì tạo lịch không chắc chắn.
+Chuỗi portal hỗ trợ đến mười lăm vị trí tiết (ca sáng 1–6, ca chiều 7–12, ca tối
+13–15). Giống khoảng nghỉ trưa giữa tiết 6–7, tiết 12 và tiết 13 luôn tách thành
+hai buổi riêng (nghỉ chiều–tối 18:15–18:30). Thiếu ngày của tuần học hoặc buổi
+học trùng vẫn làm lần đồng bộ thất bại thay vì tạo lịch không chắc chắn.
 
 ## Lưu dữ liệu và lịch học cố định
 

@@ -58,12 +58,16 @@ export const UED_PERIOD_RANGES: Record<string, string> = {
   '15:40': 'Tiết 10',
   '16:35': 'Tiết 11',
   '17:25': 'Tiết 12',
+  '18:30': 'Tiết 13',
+  '19:20': 'Tiết 14',
+  '20:15': 'Tiết 15',
 };
 
 const UED_END_PERIOD_MAP: Record<string, string> = {
   '07:50': '1', '08:40': '2', '09:35': '3', '10:30': '4',
   '11:25': '5', '12:15': '6', '13:50': '7', '14:40': '8',
   '15:35': '9', '16:30': '10', '17:25': '11', '18:15': '12',
+  '19:20': '13', '20:10': '14', '21:05': '15',
 };
 
 export function getUedPeriodBadge(startTimeFormatted: string, endTimeFormatted: string): string | null {

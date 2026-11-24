@@ -10,6 +10,7 @@ describe('UED period/week expansion',()=>{
     [4, '02:40', '03:30'], [5, '03:35', '04:25'], [6, '04:25', '05:15'],
     [7, '06:00', '06:50'], [8, '06:50', '07:40'], [9, '07:45', '08:35'],
     [10, '08:40', '09:30'], [11, '09:35', '10:25'], [12, '10:25', '11:15'],
+    [13, '11:30', '12:20'], [14, '12:20', '13:10'], [15, '13:15', '14:05'],
   ])('uses the user-confirmed clock boundaries for period %s', (period, start, end) => {
     const mask = Array.from({ length: 15 }, (_, index) => index + 1 === period ? String(period % 10) : '−').join('');
     const [event] = expandTimetable([{ ...record, fields: { ...record.fields, periods: mask, weeks: '1' } }], weeks, 'Asia/Ho_Chi_Minh');
@@ -50,8 +51,12 @@ describe('UED period/week expansion',()=>{
     expect(() => expandTimetable([record], [{ ...weeks[0], startsOn: '2025-12-30' }, weeks[1]], 'Asia/Ho_Chi_Minh')).toThrow('UED_WEEK_MAPPING_FAILED');
     expect(() => expandTimetable([{ ...record, fields: { ...record.fields, weekday: '8' } }], [{ ...weeks[0], endsOn: '2026-01-03' }, weeks[1]], 'Asia/Ho_Chi_Minh')).toThrow('UED_WEEK_MAPPING_FAILED');
   });
-  it('rejects unknown period clock times and missing week dates',()=>{
-    expect(()=>expandTimetable([{...record,fields:{...record.fields,periods:'−−−−−−−−−−−−3−−'}}],weeks,'Asia/Ho_Chi_Minh')).toThrow('UED_PERIOD_TIMES_REQUIRED');
+  it('preserves the evening break between period twelve and period thirteen and rejects missing week dates',()=>{
+    const eveningSplit = expandTimetable([{...record,fields:{...record.fields,periods:'−−−−−−−−−−−2345',weeks:'1'}}],weeks,'Asia/Ho_Chi_Minh');
+    expect(eveningSplit.map(event => [event.schedule?.startTime, event.schedule?.endTime])).toEqual([
+      ['2025-12-29T10:25:00.000Z', '2025-12-29T11:15:00.000Z'],
+      ['2025-12-29T11:30:00.000Z', '2025-12-29T14:05:00.000Z'],
+    ]);
     expect(()=>expandTimetable([record],weeks.slice(0,1),'Asia/Ho_Chi_Minh')).toThrow('UED_WEEK_MAPPING_FAILED');
     expect(()=>decodeMask('12X',15)).toThrow();
   });

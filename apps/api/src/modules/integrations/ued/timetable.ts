@@ -10,6 +10,7 @@ export const UED_PERIOD_TIMES: Record<number, readonly [string, string]> = {
   4: ['09:40','10:30'], 5: ['10:35','11:25'], 6: ['11:25','12:15'],
   7: ['13:00','13:50'], 8: ['13:50','14:40'], 9: ['14:45','15:35'],
   10: ['15:40','16:30'], 11: ['16:35','17:25'], 12: ['17:25','18:15'],
+  13: ['18:30','19:20'], 14: ['19:20','20:10'], 15: ['20:15','21:05'],
 };
 
 export function decodeMask(mask: string, maximum: number): number[] {
@@ -34,8 +35,8 @@ export function expandTimetable(records: UedRecord[], weekRanges: UedWeekRange[]
     const groups:number[][]=[];
     for(const period of periods) {
       const last=groups.at(-1);
-      // Noon is never an internal class break; represent separate morning/afternoon blocks.
-      if(last && last.at(-1)===period-1 && period!==7) last.push(period); else groups.push([period]);
+      // Noon and dinner breaks are never internal class breaks; represent separate morning/afternoon/evening blocks.
+      if(last && last.at(-1)===period-1 && period!==7 && period!==13) last.push(period); else groups.push([period]);
     }
     for(const week of weeks) {
       const range=weekRanges.find(w=>w.week===week);
